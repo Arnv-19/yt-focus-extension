@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YT Focus</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header class="header">
+      <div class="logo">
+        <span class="logo-bracket">[</span>YT<span class="logo-dot">·</span>FOCUS<span class="logo-bracket">]</span>
+      </div>
+      <div class="header-controls">
+        <button class="icon-btn" id="settingsBtn" title="Settings">⚙</button>
+      </div>
+    </header>
+
+    <!-- Setup Screen (shown if no API key) -->
+    <div id="setupScreen" class="screen hidden">
+      <div class="setup-box">
+        <h2>Setup Required</h2>
+        <p>Enter your YouTube Data API v3 key and Anthropic API key to enable all features.</p>
+        <div class="input-group">
+          <label>YouTube API Key</label>
+          <input type="password" id="ytApiKeyInput" placeholder="AIza...">
+        </div>
+        <div class="input-group">
+          <label>Anthropic API Key <span class="optional">(for AI filtering)</span></label>
+          <input type="password" id="anthropicKeyInput" placeholder="sk-ant-...">
+        </div>
+        <button class="btn-primary" id="saveKeysBtn">Save & Continue →</button>
+        <p class="hint">Keys are stored locally in your browser only.</p>
+      </div>
+    </div>
+
+    <!-- Main Screen -->
+    <div id="mainScreen" class="screen hidden">
+      <!-- Mode Tabs -->
+      <nav class="mode-tabs">
+        <button class="tab active" data-mode="search">Search</button>
+        <button class="tab" data-mode="watchlater">Watch Later</button>
+        <button class="tab" data-mode="productive">Productive</button>
+        <button class="tab" data-mode="channel">Channel</button>
+      </nav>
+
+
+      <!-- Search Mode -->
+      <div id="searchMode" class="mode-panel active">
+        <div class="search-bar">
+          <input type="text" id="searchInput" placeholder="search youtube..." autocomplete="off">
+          <button class="search-btn" id="searchBtn">→</button>
+        </div>
+        <div class="filter-row">
+          <label class="toggle-label">
+            <input type="checkbox" id="aiFilterSearch" checked>
+            <span class="toggle"></span>
+            AI Filter (block noise)
+          </label>
+        </div>
+        <div id="searchResults" class="results-list"></div>
+      </div>
+
+      <!-- Watch Later Mode -->
+      <div id="watchlaterMode" class="mode-panel">
+        <div class="panel-header">
+          <span>Your Watch Later</span>
+          <button class="btn-sm" id="loadWatchLater">Load →</button>
+        </div>
+        <div class="filter-row">
+          <label class="toggle-label">
+            <input type="checkbox" id="aiFilterWL" checked>
+            <span class="toggle"></span>
+            AI Filter
+          </label>
+        </div>
+        <div id="watchLaterResults" class="results-list"></div>
+      </div>
+
+      <!-- Productive Mode -->
+      <div id="productiveMode" class="mode-panel">
+        <div class="panel-header">
+          <span>Productive Feed</span>
+          <button class="btn-sm" id="loadProductive">Load →</button>
+        </div>
+        <div class="productive-tags">
+          <span class="tag active" data-topic="programming">coding</span>
+          <span class="tag active" data-topic="machine learning">ML/AI</span>
+          <span class="tag active" data-topic="linux terminal">linux</span>
+          <span class="tag active" data-topic="system design">systems</span>
+          <span class="tag active" data-topic="mathematics">math</span>
+          <span class="tag" data-topic="science">science</span>
+          <span class="tag" data-topic="engineering">engineering</span>
+          <span class="tag" data-topic="productivity">productivity</span>
+        </div>
+        <div id="productiveResults" class="results-list"></div>
+      </div>
+
+      <!-- Channel Mode -->
+      <div id="channelMode" class="mode-panel">
+        <div class="search-bar">
+          <input type="text" id="channelInput" placeholder="channel name or @handle...">
+          <button class="search-btn" id="channelBtn">→</button>
+        </div>
+        <div class="filter-row">
+          <label class="toggle-label">
+            <input type="checkbox" id="aiFilterChannel" checked>
+            <span class="toggle"></span>
+            AI Filter
+          </label>
+        </div>
+        <div id="channelResults" class="results-list"></div>
+      </div>
+    </div>
+
+    <!-- Settings Panel -->
+    <div id="settingsPanel" class="screen hidden">
+      <div class="settings-header">
+        <button class="back-btn" id="backBtn">← back</button>
+        <span>Settings</span>
+      </div>
+      <div class="settings-body">
+        <!-- API Keys -->
+        <div class="setting-group">
+          <label>YouTube API Key</label>
+          <input type="password" id="ytKeyEdit" placeholder="AIza...">
+        </div>
+        <div class="setting-group">
+          <label>Anthropic API Key</label>
+          <input type="password" id="anthropicKeyEdit" placeholder="sk-ant-...">
+        </div>
+
+        <!-- Page Controls -->
+        <div class="setting-section-title">&gt; page controls</div>
+
+        <div class="setting-group setting-row">
+          <span class="setting-row-label">blank homepage</span>
+          <label class="toggle-label">
+            <input type="checkbox" id="toggleBlankHomepage" checked>
+            <span class="toggle"></span>
+          </label>
+        </div>
+        <div class="setting-group setting-row">
+          <span class="setting-row-label">hide comments</span>
+          <label class="toggle-label">
+            <input type="checkbox" id="toggleHideComments" checked>
+            <span class="toggle"></span>
+          </label>
+        </div>
+        <div class="setting-group setting-row">
+          <span class="setting-row-label">hide sidebar</span>
+          <label class="toggle-label">
+            <input type="checkbox" id="toggleHideSidebar" checked>
+            <span class="toggle"></span>
+          </label>
+        </div>
+        <div class="setting-group setting-row">
+          <span class="setting-row-label">hide shorts</span>
+          <label class="toggle-label">
+            <input type="checkbox" id="toggleHideShorts" checked>
+            <span class="toggle"></span>
+          </label>
+        </div>
+
+        <!-- Channel Filter -->
+        <div class="setting-section-title">&gt; channel allow-list</div>
+        <div class="setting-group">
+          <label>allowed channels <span class="optional">(comma-separated, leave empty for all)</span></label>
+          <input type="text" id="allowedChannelsInput" placeholder="Fireship, ThePrimeagen, Linus Tech...">
+        </div>
+
+
+        <!-- Keyword Blocklist -->
+        <div class="setting-section-title">&gt; keyword blocklist</div>
+        <div class="setting-group">
+          <label>blocked title words <span class="optional">(comma-separated)</span></label>
+          <input type="text" id="blockedKeywordsInput" placeholder="drama, exposed, beef, clickbait...">
+        </div>
+
+        <div class="setting-section-title">&gt; ai blocked categories</div>
+        <div class="setting-group">
+          <div class="blocked-tags">
+            <span class="block-tag active" data-cat="music">music</span>
+            <span class="block-tag active" data-cat="entertainment">entertainment</span>
+            <span class="block-tag active" data-cat="gaming highlights">gaming clips</span>
+            <span class="block-tag active" data-cat="memes">memes</span>
+            <span class="block-tag active" data-cat="reaction videos">reactions</span>
+            <span class="block-tag active" data-cat="vlogs">vlogs</span>
+            <span class="block-tag" data-cat="sports">sports</span>
+            <span class="block-tag" data-cat="cooking">cooking</span>
+          </div>
+        </div>
+
+        <button class="btn-primary" id="saveSettingsBtn">Save Settings</button>
+        <button class="btn-danger" id="clearDataBtn">Clear All Data</button>
+      </div>
+    </div>
+
+
+    <!-- Loading overlay -->
+    <div id="loadingOverlay" class="loading hidden">
+      <div class="loading-text">fetching<span class="dots">...</span></div>
+    </div>
+
+    <!-- Status bar -->
+    <div id="statusBar" class="status-bar hidden"></div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

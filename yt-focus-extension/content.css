@@ -1,0 +1,212 @@
+/* ===== YT FOCUS — CONTENT CSS ===== */
+/* Injected into every youtube.com page */
+
+/* ================================================================
+   END-SCREEN CARDS & AUTOPLAY — hide all post-video rabbit holes
+   ================================================================ */
+
+.ytp-endscreen-content,
+.ytp-ce-element,
+.ytp-ce-covering-overlay,
+.ytp-ce-expanding-overlay,
+.ytp-ce-video,
+.ytp-ce-playlist,
+.ytp-ce-channel,
+.ytp-autonav-endscreen-upnext-container,
+.ytp-autonav-endscreen,
+.ytp-endscreen-previous,
+.ytp-upnext,
+.ytp-upnext-autoplay { display: none !important; }
+
+/* ================================================================
+   THUMBNAIL & IMAGE REMOVAL — text-only mode across all YT pages
+   ================================================================ */
+
+
+/* Hide all video thumbnails */
+ytd-thumbnail,
+#thumbnail.ytd-playlist-video-renderer,
+#thumbnail.ytd-video-renderer,
+#thumbnail.ytd-grid-video-renderer,
+#thumbnail.ytd-compact-video-renderer,
+ytd-playlist-thumbnail,
+ytd-movie-renderer ytd-thumbnail,
+ytd-rich-item-renderer ytd-thumbnail,
+ytd-video-renderer ytd-thumbnail,
+ytd-compact-video-renderer ytd-thumbnail,
+ytd-grid-video-renderer ytd-thumbnail,
+ytd-playlist-video-renderer ytd-thumbnail {
+  display: none !important;
+}
+
+/* Hide channel avatars in video cards */
+ytd-video-renderer #channel-thumbnail,
+ytd-rich-item-renderer #channel-thumbnail,
+ytd-compact-video-renderer #channel-thumbnail,
+ytd-playlist-video-renderer yt-img-shadow {
+  display: none !important;
+}
+
+/* Hide preview hover thumbnails */
+ytd-moving-thumbnail-renderer,
+ytd-thumbnail-overlay-resume-playback-renderer,
+ytd-thumbnail-overlay-time-status-renderer,
+ytd-thumbnail-overlay-toggle-button-renderer,
+ytd-thumbnail-overlay-now-playing-renderer,
+ytd-thumbnail-overlay-bottom-panel-renderer,
+ytd-thumbnail-overlay-loading-preview-renderer {
+  display: none !important;
+}
+
+/* Make video cards row-only (no grid layout shift from missing thumbnails) */
+ytd-video-renderer #dismissible,
+ytd-rich-item-renderer #content {
+  display: block !important;
+}
+
+/* Style the remaining title links to look clean */
+ytd-video-renderer #video-title,
+ytd-rich-item-renderer #video-title,
+ytd-compact-video-renderer #video-title,
+ytd-grid-video-renderer #video-title,
+ytd-playlist-video-renderer #video-title {
+  font-family: 'IBM Plex Mono', 'Courier New', monospace !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  color: #e8e8ec !important;
+  text-decoration: none !important;
+  white-space: normal !important;
+  line-height: 1.5 !important;
+}
+ytd-video-renderer #video-title:hover,
+ytd-rich-item-renderer #video-title:hover,
+ytd-compact-video-renderer #video-title:hover,
+ytd-grid-video-renderer #video-title:hover,
+ytd-playlist-video-renderer #video-title:hover {
+  color: #00d4aa !important;
+}
+
+/* Compact the cards since no thumbnail takes space */
+ytd-video-renderer,
+ytd-rich-item-renderer,
+ytd-playlist-video-renderer,
+ytd-compact-video-renderer {
+  padding: 6px 0 !important;
+  border-bottom: 1px solid #1e1e22 !important;
+}
+
+/* Hide watch progress bars on thumbnails (not needed without thumbnails) */
+#progress.ytd-thumbnail-overlay-resume-playback-renderer { display: none !important; }
+
+
+
+/* ---- Blank Homepage CMD Overlay ---- */
+
+#ytf-blank-overlay {
+  position: fixed;
+  top: 56px; /* below YT masthead */
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0a0a0b;
+  z-index: 9000;
+  font-family: 'IBM Plex Mono', 'Courier New', Courier, monospace;
+  animation: ytf-fade-in 0.3s ease;
+}
+
+@keyframes ytf-fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.ytf-cmd-window {
+  width: 520px;
+  max-width: 94vw;
+  border: 1px solid #2a2a2f;
+  background: #0f0f10;
+  box-shadow: 0 0 60px rgba(0, 212, 170, 0.06), 0 20px 60px rgba(0,0,0,0.8);
+}
+
+/* Title bar */
+.ytf-cmd-titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  background: #1a1a1d;
+  border-bottom: 1px solid #2a2a2f;
+}
+
+.ytf-cmd-title {
+  font-size: 11px;
+  color: #606070;
+  letter-spacing: 0.04em;
+}
+
+.ytf-cmd-dots { display: flex; gap: 6px; }
+
+.ytf-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.ytf-dot-r { background: #ff5f57; }
+.ytf-dot-y { background: #febc2e; }
+.ytf-dot-g { background: #28c840; }
+
+/* Body */
+.ytf-cmd-body {
+  padding: 20px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ytf-line {
+  font-size: 12px;
+  color: #e8e8ec;
+  letter-spacing: 0.03em;
+  line-height: 1.6;
+}
+
+.ytf-dim  { color: #404050 !important; }
+.ytf-green { color: #00d4aa !important; }
+
+/* Shortcuts row */
+.ytf-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.ytf-shortcut {
+  font-family: 'IBM Plex Mono', 'Courier New', monospace;
+  font-size: 11px;
+  color: #00d4aa;
+  text-decoration: none;
+  border: 1px solid #1e3d38;
+  padding: 4px 10px;
+  background: rgba(0, 212, 170, 0.04);
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  letter-spacing: 0.04em;
+}
+.ytf-shortcut:hover {
+  background: rgba(0, 212, 170, 0.12);
+  border-color: #00d4aa;
+  color: #00ffcc;
+}
+
+/* Blinking cursor */
+.ytf-cursor {
+  animation: ytf-blink 1s step-start infinite;
+  color: #00d4aa;
+}
+@keyframes ytf-blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
