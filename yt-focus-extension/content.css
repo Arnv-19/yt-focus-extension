@@ -19,6 +19,18 @@
 .ytp-upnext-autoplay { display: none !important; }
 
 /* ================================================================
+   SIDEBAR RELATED / RECOMMENDED VIDEOS — always hidden on watch pages
+   ================================================================ */
+
+/* The "Up Next" related videos panel in the right sidebar */
+ytd-watch-next-secondary-results-renderer { display: none !important; }
+
+/* Individual compact video cards in the sidebar (catches any stragglers) */
+#secondary ytd-compact-video-renderer { display: none !important; }
+#secondary ytd-compact-radio-renderer  { display: none !important; }
+#secondary ytd-shelf-renderer          { display: none !important; }
+
+/* ================================================================
    THUMBNAIL & IMAGE REMOVAL — text-only mode across all YT pages
    ================================================================ */
 
@@ -210,3 +222,30 @@ ytd-compact-video-renderer {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0; }
 }
+
+/* ================================================================
+   WATCH-PAGE CHANNEL BLOCK SCREEN
+   ================================================================ */
+
+#ytf-watch-block {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0a0a0b;
+  z-index: 99999;
+  font-family: 'IBM Plex Mono', 'Courier New', Courier, monospace;
+  animation: ytf-fade-in 0.3s ease;
+}
+
+/* ================================================================
+   HOMEPAGE SEARCH BAR HIDE — prevent voice-search ghost icon
+   ================================================================ */
+
+/* Voice search button can become an orphan float when we hide the bar */
+#voice-search-button { display: none !important; }
+
