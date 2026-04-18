@@ -5,7 +5,6 @@
   "description": "Distraction-free YouTube: text-only titles, productive mode, channel filter, AI content filtering.",
   "permissions": [
     "storage",
-    "identity",
     "tabs",
     "activeTab",
     "scripting"

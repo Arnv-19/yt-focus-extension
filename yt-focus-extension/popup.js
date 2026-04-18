@@ -326,14 +326,22 @@ Return ONLY a JSON array of indices to KEEP. Example: [0,2,5,8]. No explanation,
       })
     });
 
-    if (!res.ok) return videos; // Fail silently, return all
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      const msg = errData.error?.message || `HTTP ${res.status}`;
+      console.warn('[YT Focus] AI filter error:', msg);
+      showStatus(`AI filter failed: ${msg}`, 'error');
+      return videos;
+    }
     const data = await res.json();
     const text = data.content?.[0]?.text?.trim() || '[]';
     const keepIndices = JSON.parse(text);
     const filtered = keepIndices.map(i => videos[i]).filter(Boolean);
-    return filtered.length > 0 ? filtered : videos; // Fallback if AI filters everything
-  } catch {
-    return videos; // Fail silently
+    return filtered.length > 0 ? filtered : videos;
+  } catch (err) {
+    console.warn('[YT Focus] AI filter exception:', err);
+    showStatus('AI filter unavailable — showing all results', 'error');
+    return videos;
   }
 }
 
