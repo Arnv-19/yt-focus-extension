@@ -13,7 +13,11 @@ let pageSettings = {
   hideShorts: true,
   allowedChannels: [],
   blockedKeywords: [],
+  lockMode: false,
 };
+
+// Lock mode state
+let _lockUnlockUntil = 0; // epoch ms — non-zero means currently in unlock countdown
 
 // ===== INIT =====
 document.addEventListener('DOMContentLoaded', async () => {
@@ -32,7 +36,7 @@ async function loadSettings() {
     chrome.storage.local.get(
       ['ytApiKey', 'anthropicKey', 'blockedCategories', 'productiveTopics',
         'blankHomepage', 'hideComments', 'hideSidebar', 'hideShorts',
-        'allowedChannels', 'blockedKeywords'],
+        'allowedChannels', 'blockedKeywords', 'lockMode', 'lockUnlockUntil'],
       (data) => {
         ytApiKey = data.ytApiKey || ytApiKey;
         anthropicKey = data.anthropicKey || '';
@@ -45,9 +49,12 @@ async function loadSettings() {
         pageSettings.hideShorts = data.hideShorts !== undefined ? data.hideShorts : true;
         pageSettings.allowedChannels = data.allowedChannels || [];
         pageSettings.blockedKeywords = data.blockedKeywords || [];
+        pageSettings.lockMode = data.lockMode || false;
+        _lockUnlockUntil = data.lockUnlockUntil || 0;
 
         syncBlockedTagsUI();
         syncProductiveTagsUI();
+        syncLockUI();
         resolve();
       }
     );
@@ -58,18 +65,24 @@ async function saveSettings() {
   return new Promise(resolve => {
     chrome.storage.local.set({
       ytApiKey, anthropicKey, blockedCategories, productiveTopics,
-      ...pageSettings
+      ...pageSettings,
+      lockUnlockUntil: _lockUnlockUntil,
     }, resolve);
   });
 }
 
 // Send new page settings to the active YouTube tab immediately
-async function notifyActiveTab() {
+async function notifyActiveTab(extra = {}) {
   try {
     const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
     const tab = tabs[0];
     if (tab && tab.url && tab.url.includes('youtube.com')) {
-      chrome.tabs.sendMessage(tab.id, { action: 'applyFilters', settings: pageSettings });
+      chrome.tabs.sendMessage(tab.id, {
+        action: 'applyFilters',
+        settings: pageSettings,
+        lockUnlockUntil: _lockUnlockUntil,
+        ...extra
+      });
     }
   } catch (e) { /* tab may not have content script */ }
 }
@@ -99,6 +112,9 @@ function showScreen(name) {
 function setupEventListeners() {
   // Setup screen
   document.getElementById('saveKeysBtn').addEventListener('click', handleSaveKeys);
+
+  // Lock Mode toggle
+  document.getElementById('lockBtn').addEventListener('click', handleLockToggle);
 
   // Settings
   document.getElementById('settingsBtn').addEventListener('click', () => showScreen('settings'));
@@ -229,6 +245,57 @@ function syncProductiveTagsUI() {
       tag.classList.remove('active');
     }
   });
+}
+
+function syncLockUI() {
+  const btn = document.getElementById('lockBtn');
+  const banner = document.getElementById('lockBanner');
+  const isLocked = pageSettings.lockMode;
+  const inCountdown = !isLocked && Date.now() < _lockUnlockUntil;
+
+  if (btn) {
+    btn.textContent = isLocked ? '🔒' : '🔓';
+    btn.title = isLocked ? 'Lock Mode ON — click to unlock' : 'Lock Mode OFF — click to lock';
+    btn.classList.toggle('lock-active', isLocked);
+  }
+  if (banner) {
+    banner.classList.toggle('hidden', !isLocked && !inCountdown);
+    if (inCountdown) {
+      const remaining = Math.ceil((_lockUnlockUntil - Date.now()) / 1000);
+      banner.querySelector('span').textContent = `🔓 Unlocking in ${remaining}s…`;
+    } else if (isLocked) {
+      banner.querySelector('span').textContent = '🔒 Lock Mode Active — YouTube is locked';
+    }
+  }
+}
+
+async function handleLockToggle() {
+  if (pageSettings.lockMode) {
+    // Turning OFF — set a 5-second countdown before browsing is allowed
+    pageSettings.lockMode = false;
+    _lockUnlockUntil = Date.now() + 5000;
+    await saveSettings();
+    await notifyActiveTab();
+    syncLockUI();
+
+    // Update the banner countdown every second
+    const timer = setInterval(() => {
+      if (Date.now() >= _lockUnlockUntil) {
+        clearInterval(timer);
+      }
+      syncLockUI();
+    }, 500);
+
+    showStatus('Lock mode off — 5s countdown started', 'success');
+  } else {
+    // Turning ON
+    pageSettings.lockMode = true;
+    _lockUnlockUntil = 0;
+    await saveSettings();
+    await notifyActiveTab();
+    syncLockUI();
+    showStatus('🔒 Lock mode enabled', 'error');
+  }
 }
 
 // ===== YOUTUBE API =====

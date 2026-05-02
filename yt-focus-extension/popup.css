@@ -566,4 +566,43 @@ input[type="checkbox"]:checked + .toggle::after {
 .time-dot { color: var(--border2); }
 .time-segment { display: flex; gap: 4px; align-items: center; }
 
+/* ===== LOCK MODE ===== */
+.lock-btn {
+  font-size: 15px;
+  transition: transform 0.2s, filter 0.2s;
+}
+.lock-btn:hover { transform: scale(1.15); }
+.lock-btn.lock-active {
+  filter: drop-shadow(0 0 6px var(--red));
+  animation: lock-pulse 2s infinite;
+}
+
+@keyframes lock-pulse {
+  0%, 100% { filter: drop-shadow(0 0 4px var(--red)); }
+  50%       { filter: drop-shadow(0 0 10px var(--red)); }
+}
+
+.lock-banner {
+  background: linear-gradient(135deg, rgba(255,68,102,0.08) 0%, rgba(10,10,11,0) 100%);
+  border-bottom: 1px solid rgba(255,68,102,0.25);
+  padding: 8px 14px;
+  font-family: var(--mono);
+  font-size: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.lock-banner > span:first-child {
+  color: var(--red);
+  letter-spacing: 0.06em;
+}
+
+.lock-banner-quote {
+  color: var(--accent);
+  font-style: italic;
+  letter-spacing: 0.03em;
+  opacity: 0.75;
+}
 

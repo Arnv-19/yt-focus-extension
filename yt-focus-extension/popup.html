@@ -16,6 +16,7 @@
         <span class="logo-bracket">[</span>YT<span class="logo-dot">·</span>FOCUS<span class="logo-bracket">]</span>
       </div>
       <div class="header-controls">
+        <button class="icon-btn lock-btn" id="lockBtn" title="Lock Mode">🔓</button>
         <button class="icon-btn" id="settingsBtn" title="Settings">⚙</button>
       </div>
     </header>
@@ -40,6 +41,12 @@
 
     <!-- Main Screen -->
     <div id="mainScreen" class="screen hidden">
+      <!-- Lock mode banner (shown when locked) -->
+      <div id="lockBanner" class="lock-banner hidden">
+        <span>🔒 Lock Mode Active &mdash; YouTube is locked</span>
+        <span class="lock-banner-quote">&ldquo;&nbsp;Spend your time wisely&nbsp;&mdash; don&rsquo;t wander off.&nbsp;&rdquo;</span>
+      </div>
+
       <!-- Mode Tabs -->
       <nav class="mode-tabs">
         <button class="tab active" data-mode="search">Search</button>
