@@ -28,6 +28,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     showScreen('setup');
   } else {
     showScreen('main');
+    switchMode(activeMode);
+    // Jump straight into typing a search
+    if (activeMode === 'search') document.getElementById('searchInput').focus();
   }
 });
 
@@ -36,12 +39,13 @@ async function loadSettings() {
     chrome.storage.local.get(
       ['ytApiKey', 'anthropicKey', 'blockedCategories', 'productiveTopics',
         'blankHomepage', 'hideComments', 'hideSidebar', 'hideShorts',
-        'allowedChannels', 'blockedKeywords', 'lockMode', 'lockUnlockUntil'],
+        'allowedChannels', 'blockedKeywords', 'lockMode', 'lockUnlockUntil', 'lastMode'],
       (data) => {
         ytApiKey = data.ytApiKey || ytApiKey;
         anthropicKey = data.anthropicKey || '';
         blockedCategories = data.blockedCategories || blockedCategories;
         productiveTopics = data.productiveTopics || productiveTopics;
+        activeMode = data.lastMode || activeMode;
 
         pageSettings.blankHomepage = data.blankHomepage !== undefined ? data.blankHomepage : true;
         pageSettings.hideComments = data.hideComments !== undefined ? data.hideComments : true;
@@ -71,21 +75,8 @@ async function saveSettings() {
   });
 }
 
-// Send new page settings to the active YouTube tab immediately
-async function notifyActiveTab(extra = {}) {
-  try {
-    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-    const tab = tabs[0];
-    if (tab && tab.url && tab.url.includes('youtube.com')) {
-      chrome.tabs.sendMessage(tab.id, {
-        action: 'applyFilters',
-        settings: pageSettings,
-        lockUnlockUntil: _lockUnlockUntil,
-        ...extra
-      });
-    }
-  } catch (e) { /* tab may not have content script */ }
-}
+// Settings changes reach every YouTube tab via chrome.storage.onChanged in
+// the content script — no per-tab messaging needed after saveSettings().
 
 // ===== SCREEN MANAGEMENT =====
 function showScreen(name) {
@@ -146,6 +137,8 @@ function setupEventListeners() {
       } else {
         productiveTopics = productiveTopics.filter(t => t !== tag.dataset.topic);
       }
+      // Persist immediately — these live on the main screen with no Save button
+      chrome.storage.local.set({ productiveTopics });
     });
   });
 
@@ -170,12 +163,19 @@ function setupEventListeners() {
 }
 
 function switchMode(mode) {
+  const tab = document.querySelector(`.tab[data-mode="${mode}"]`);
+  const panel = document.getElementById(`${mode}Mode`);
+  if (!tab || !panel) return; // stale stored mode
+
   activeMode = mode;
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.querySelector(`.tab[data-mode="${mode}"]`).classList.add('active');
+  tab.classList.add('active');
 
   document.querySelectorAll('.mode-panel').forEach(p => p.classList.remove('active'));
-  document.getElementById(`${mode}Mode`).classList.add('active');
+  panel.classList.add('active');
+
+  // Reopen the popup on the mode you used last
+  chrome.storage.local.set({ lastMode: mode });
 }
 
 // ===== SETUP =====
@@ -214,7 +214,6 @@ async function handleSaveSettings() {
     .split(',').map(k => k.trim()).filter(Boolean);
 
   await saveSettings();
-  await notifyActiveTab();
   showStatus('Settings saved', 'success');
   showScreen('main');
 }
@@ -275,7 +274,6 @@ async function handleLockToggle() {
     pageSettings.lockMode = false;
     _lockUnlockUntil = Date.now() + 5000;
     await saveSettings();
-    await notifyActiveTab();
     syncLockUI();
 
     // Update the banner countdown every second
@@ -292,7 +290,6 @@ async function handleLockToggle() {
     pageSettings.lockMode = true;
     _lockUnlockUntil = 0;
     await saveSettings();
-    await notifyActiveTab();
     syncLockUI();
     showStatus('🔒 Lock mode enabled', 'error');
   }
@@ -402,7 +399,11 @@ Return ONLY a JSON array of indices to KEEP. Example: [0,2,5,8]. No explanation,
     }
     const data = await res.json();
     const text = data.content?.[0]?.text?.trim() || '[]';
-    const keepIndices = JSON.parse(text);
+    // The model occasionally wraps the array in prose or ```json fences —
+    // pull out the first array instead of trusting the whole response.
+    const arrMatch = text.match(/\[[\d,\s]*\]/);
+    const keepIndices = arrMatch ? JSON.parse(arrMatch[0]) : null;
+    if (!Array.isArray(keepIndices)) return videos;
     const filtered = keepIndices.map(i => videos[i]).filter(Boolean);
     return filtered.length > 0 ? filtered : videos;
   } catch (err) {
@@ -446,6 +447,12 @@ async function handleWatchLater() {
     if (currentTab?.url?.includes('youtube.com/playlist?list=WL')) {
       // User is already on WL page, scrape it
       chrome.tabs.sendMessage(currentTab.id, { action: 'getWatchLater' }, async (response) => {
+        if (chrome.runtime.lastError) {
+          // Content script not loaded in that tab (e.g. tab opened before install)
+          renderWatchLaterPrompt(container);
+          showLoading(false);
+          return;
+        }
         if (response?.videos) {
           let videos = response.videos;
           videos = await aiFilter(videos, useFilter);
@@ -470,9 +477,8 @@ function renderWatchLaterPrompt(container) {
   container.innerHTML = `
     <div class="empty-state">
       To access Watch Later,<br>
-      <a href="https://www.youtube.com/playlist?list=WL" target="_blank" 
-         style="color: var(--accent); text-decoration: none; cursor: pointer;"
-         onclick="chrome.tabs.create({url:'https://www.youtube.com/playlist?list=WL'})">
+      <a href="https://www.youtube.com/playlist?list=WL"
+         style="color: var(--accent); text-decoration: none; cursor: pointer;">
          → open Watch Later on YouTube
       </a><br>then click Load again.
     </div>`;
