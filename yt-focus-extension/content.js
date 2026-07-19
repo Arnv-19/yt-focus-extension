@@ -14,7 +14,7 @@ let settings = {
 
 // ===== LOCK MODE STATE =====
 let _lockUnlockUntil = 0; // epoch ms — non-zero means unlocked briefly
-let _lockEnforcerRAF = null;
+let _lockTimer = null;
 
 // Inject end-screen CSS once so we don't have to wait for JS observers
 (function injectEndScreenCSS() {
@@ -35,44 +35,48 @@ let _lockEnforcerRAF = null;
   (document.head || document.documentElement).appendChild(s);
 })();
 
-// ===== MODULE-LEVEL OBSERVER REGISTRY =====
-// All persistent observers stored here — single source of truth.
-// Keys map to window[key] for easy lookup; we also track them here for restoreAll().
-const OBS = {
-  _sidebarObserver: null,   // ytd-watch-next-secondary-results-renderer
-  _sidebar2Observer: null,   // #secondary (non-playlist watch pages)
-  _commentsObserver: null,   // #comments
-  _searchbarObserver: null,   // homepage search bar
-  _shortsObserver: null,   // shorts shelf + chips
-  _playlistRecObserver: null,   // playlist page recommendations
-  _channelFilterObs: null,   // home/search channel allow-list cards
-  _keywordFilterObs: null,   // keyword blocklist cards
-};
+// ===== RULE REGISTRY =====
+// One MutationObserver for the whole extension. applyFilters() decides which
+// rules are active for the current page + settings; every DOM mutation batch
+// re-runs the active rules through a debounce.
+const activeRules = new Map(); // name -> idempotent function
+let _rulesTimer = null;
+let lastUrl = location.href;
 
-// Channel whitelist gate state — reset on every SPA navigation
-let _watchGateActive = false;
+const masterObserver = new MutationObserver(scheduleRules);
+masterObserver.observe(document.documentElement, { childList: true, subtree: true });
+
+function scheduleRules() {
+  if (_rulesTimer) return;
+  _rulesTimer = setTimeout(() => {
+    _rulesTimer = null;
+    if (location.href !== lastUrl) onNavigate();
+    runRules();
+  }, 100);
+}
+
+function runRules() {
+  activeRules.forEach(fn => {
+    try { fn(); } catch (e) { /* keep other rules running */ }
+  });
+}
+
+// ===== NAVIGATION (SPA) =====
+// yt-navigate-finish is YouTube's own SPA navigation event; the URL check in
+// scheduleRules is the fallback if it ever stops firing.
+window.addEventListener('yt-navigate-finish', () => {
+  if (location.href !== lastUrl) onNavigate();
+});
+
+function onNavigate() {
+  lastUrl = location.href;
+  clearWatchBlock();
+  applyFilters();
+}
 
 // ===== BOOT =====
 loadSettingsAndApply();
 
-// Re-apply when YouTube navigates (SPA)
-let lastUrl = location.href;
-const navObserver = new MutationObserver(() => {
-  if (location.href !== lastUrl) {
-    lastUrl = location.href;
-    // Reset per-page watch gate
-    _watchGateActive = false;
-    const wb = document.getElementById('ytf-watch-block');
-    if (wb) wb.remove();
-    ['#player', '#movie_player', '#player-container', 'ytd-watch-flexy'].forEach(sel => {
-      document.querySelectorAll(sel).forEach(el => { el.style.visibility = ''; });
-    });
-    setTimeout(applyFilters, 600);
-  }
-});
-navObserver.observe(document.body, { childList: true, subtree: true });
-
-// ===== LOAD SETTINGS =====
 function loadSettingsAndApply() {
   chrome.storage.local.get(
     ['blankHomepage', 'hideComments', 'hideSidebar', 'hideShorts',
@@ -87,10 +91,33 @@ function loadSettingsAndApply() {
       settings.lockMode = data.lockMode || false;
       _lockUnlockUntil = data.lockUnlockUntil || 0;
       applyFilters();
-      if (settings.lockMode) startLockEnforcer();
+      if (settings.lockMode || Date.now() < _lockUnlockUntil) startLockEnforcer();
     }
   );
 }
+
+// React to settings saved from the popup — fires in EVERY YouTube tab,
+// so lock mode and filter changes apply everywhere, not just the active tab.
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local') return;
+  let dirty = false;
+  for (const key of Object.keys(changes)) {
+    if (key in settings) {
+      settings[key] = changes[key].newValue;
+      dirty = true;
+    } else if (key === 'lockUnlockUntil') {
+      _lockUnlockUntil = changes[key].newValue || 0;
+      dirty = true;
+    }
+  }
+  if (!dirty) return;
+
+  if (settings.lockMode || Date.now() < _lockUnlockUntil) startLockEnforcer();
+  else stopLockEnforcer();
+
+  restoreAll();
+  applyFilters();
+});
 
 // ===== MAIN APPLY =====
 function applyFilters() {
@@ -101,147 +128,93 @@ function applyFilters() {
   const isSearch = path === '/results';
   const isPlaylist = path === '/playlist';
 
-  handleHomepage(isHome);
+  activeRules.clear();
 
-  // Hide/restore homepage search bar
-  if (isHome) hideSearchbar(); else showSearchbar();
+  // Homepage blanking + search bar
+  if (isHome && settings.blankHomepage) {
+    activeRules.set('homepage', ruleHomepage);
+    activeRules.set('searchbar', ruleHideSearchbar);
+  } else {
+    removeBlankOverlay();
+    const grid = document.querySelector('ytd-rich-grid-renderer');
+    if (grid) grid.style.display = '';
+    showSearchbar();
+  }
 
   if (isWatch) {
-    if (settings.hideComments) persistHide('#comments', '_commentsObserver');
+    if (settings.hideComments) activeRules.set('comments', ruleHideComments);
 
     if (settings.hideSidebar) {
       // Always kill the related-videos panel (even inside playlists)
-      persistHide('ytd-watch-next-secondary-results-renderer', '_sidebarObserver');
+      activeRules.set('sidebarRelated', ruleHideSidebarRelated);
 
       const inPlaylist = new URLSearchParams(location.search).has('list');
       if (!inPlaylist) {
         // No playlist — collapse the entire sidebar column
-        persistHide('#secondary', '_sidebar2Observer');
+        activeRules.set('sidebarColumn', ruleHideSidebarColumn);
       } else {
-        // In a playlist — show the sidebar column (for the queue) but related videos stay hidden above
-        disconnectObs('_sidebar2Observer');
+        // In a playlist — show the sidebar column (for the queue); related videos stay hidden
         const sec = document.querySelector('#secondary');
         if (sec) sec.style.display = '';
       }
     }
 
     // Channel whitelist gate
-    if (settings.allowedChannels.length > 0) checkWatchPageChannel();
+    if (settings.allowedChannels.length > 0) activeRules.set('watchGate', ruleWatchGate);
 
-    disableAutoplay();
-  } else {
-    // Leaving a watch page — release watch-page-only observers
-    disconnectObs('_sidebarObserver');
-    disconnectObs('_sidebar2Observer');
-    disconnectObs('_commentsObserver');
+    activeRules.set('autoplayOff', ruleAutoplayOff);
+    activeRules.set('endScreen', ruleHideEndScreen);
   }
 
-  // Playlist page — hide recommended sections below the queue
-  if (isPlaylist) {
-    hidePlaylistRecommended();
-  } else {
-    disconnectObs('_playlistRecObserver');
-  }
+  if (isPlaylist) activeRules.set('playlistRec', rulePlaylistRecommended);
 
-  if (settings.hideShorts) hideShorts();
+  if (settings.hideShorts) activeRules.set('shorts', ruleHideShorts);
 
-  if (settings.allowedChannels.length > 0) {
-    if (isHome) filterCardsByChannel('ytd-rich-item-renderer');
-    if (isSearch) filterCardsByChannel('ytd-video-renderer');
+  if (settings.allowedChannels.length > 0 && (isHome || isSearch)) {
+    activeRules.set('channelCards', ruleChannelCards);
   }
 
   if (settings.blockedKeywords.length > 0) {
-    filterCardsByKeyword([
-      'ytd-rich-item-renderer',
-      'ytd-video-renderer',
-      'ytd-compact-video-renderer',
-      'ytd-playlist-video-renderer',
-    ]);
+    activeRules.set('keywordCards', ruleKeywordCards);
   }
 
-  // Always run end-screen hider on watch pages
-  if (isWatch) hideEndScreenCards();
+  activeRules.set('clutter', ruleClutter);
 
-  hideClutter();
-
-  // Lock mode enforcement
-  if (settings.lockMode || (Date.now() < _lockUnlockUntil)) {
-    startLockEnforcer();
-  }
+  runRules();
 }
 
-// ===== OBSERVER HELPERS =====
+// ===== RULES =====
+// Each rule is idempotent and re-reads settings, so re-running it on every
+// mutation batch keeps YouTube's re-rendered elements hidden.
 
-/** Disconnect and null out a named observer from the OBS registry */
-function disconnectObs(key) {
-  if (OBS[key]) { OBS[key].disconnect(); OBS[key] = null; }
-  if (window[key]) { window[key].disconnect(); window[key] = null; }
-}
-
-/** Disconnect ALL registered observers */
-function disconnectAllObs() {
-  Object.keys(OBS).forEach(disconnectObs);
-}
-
-/**
- * persistHide — keeps an element hidden even when YouTube re-renders it.
- * Singleton: only one observer per key is ever created.
- */
-function persistHide(selector, key) {
-  // Immediately apply
-  document.querySelectorAll(selector).forEach(el => { el.style.display = 'none'; });
-
-  // Guard — don't create a second observer if one already exists
-  if (OBS[key]) return;
-
-  const obs = new MutationObserver(() => {
-    document.querySelectorAll(selector).forEach(el => { el.style.display = 'none'; });
+function hideAll(selector) {
+  document.querySelectorAll(selector).forEach(el => {
+    if (el.style.display !== 'none') el.style.display = 'none';
   });
-  obs.observe(document.body, { childList: true, subtree: true });
-  OBS[key] = obs;
-  window[key] = obs; // keep window ref consistent for any external checks
 }
 
-// ===== HOMEPAGE BLANKING =====
-// Trust the DOM check alone — no redundant boolean needed (issue #12)
-function handleHomepage(isHome) {
-  const overlay = document.getElementById('ytf-blank-overlay');
+function ruleHideComments() { hideAll('#comments'); }
+function ruleHideSidebarRelated() { hideAll('ytd-watch-next-secondary-results-renderer'); }
+function ruleHideSidebarColumn() { hideAll('#secondary'); }
 
-  if (!isHome || !settings.blankHomepage) {
-    if (overlay) overlay.remove();
-    const grid = document.querySelector('ytd-rich-grid-renderer');
-    if (grid) grid.style.display = '';
-    return;
-  }
-
+function ruleHomepage() {
   const grid = document.querySelector('ytd-rich-grid-renderer');
-  if (grid) grid.style.display = 'none';
-
-  // injectCmdOverlay already guards via getElementById — no extra flag needed
+  if (grid && grid.style.display !== 'none') grid.style.display = 'none';
   injectCmdOverlay();
 }
 
-// ===== HOMEPAGE SEARCH BAR =====
-function hideSearchbar() {
-  if (OBS._searchbarObserver) return; // already running
-  const selectors = ['#search', 'ytd-searchbox', '#search-form'];
-  const hide = () => {
-    selectors.forEach(sel => {
-      document.querySelectorAll(sel).forEach(el => {
+function ruleHideSearchbar() {
+  ['#search', 'ytd-searchbox', '#search-form'].forEach(sel => {
+    document.querySelectorAll(sel).forEach(el => {
+      if (el.style.visibility !== 'hidden') {
         el.style.visibility = 'hidden';
         el.style.pointerEvents = 'none';
-      });
+      }
     });
-  };
-  hide();
-  const obs = new MutationObserver(hide);
-  obs.observe(document.body, { childList: true, subtree: true });
-  OBS._searchbarObserver = obs;
-  window._searchbarObserver = obs;
+  });
 }
 
 function showSearchbar() {
-  disconnectObs('_searchbarObserver');
   ['#search', 'ytd-searchbox', '#search-form'].forEach(sel => {
     document.querySelectorAll(sel).forEach(el => {
       el.style.visibility = '';
@@ -250,6 +223,194 @@ function showSearchbar() {
   });
 }
 
+function ruleAutoplayOff() {
+  const btn = document.querySelector('.ytp-autonav-toggle-button[aria-checked="true"]');
+  if (btn) btn.click();
+}
+
+function ruleHideEndScreen() {
+  // CSS handles most of it; this catches inline-styled stragglers
+  [
+    '.ytp-endscreen-content', '.ytp-ce-element', '.ytp-ce-covering-overlay',
+    '.ytp-ce-element-shadow', '.ytp-endscreen-previous', '.ytp-endscreen-next',
+    'yt-endscreen-renderer', 'ytd-endscreen-renderer', '.html5-endscreen',
+  ].forEach(sel => {
+    document.querySelectorAll(sel).forEach(el => {
+      if (el.style.display !== 'none') {
+        el.style.setProperty('display', 'none', 'important');
+        el.style.setProperty('opacity', '0', 'important');
+        el.style.setProperty('pointer-events', 'none', 'important');
+      }
+    });
+  });
+}
+
+function ruleHideShorts() {
+  [
+    'ytd-reel-shelf-renderer',
+    'ytd-rich-shelf-renderer[is-shorts]',
+    '#guide-inner-content ytd-guide-entry-renderer a[href="/shorts"]',
+    'ytd-mini-guide-entry-renderer a[href="/shorts"]',
+    'ytd-search-filter-group-renderer',
+  ].forEach(hideAll);
+  document.querySelectorAll('yt-chip-cloud-chip-renderer').forEach(chip => {
+    if (chip.style.display === 'none') return;
+    const link = chip.querySelector('a');
+    const label = chip.textContent?.trim().toLowerCase();
+    if (label === 'shorts' || link?.href?.includes('EgIQAQ')) chip.style.display = 'none';
+  });
+}
+
+function ruleClutter() {
+  hideAll('ytd-masthead .ytd-notification-topbar-button-renderer');
+}
+
+// Playlist page — hide recommended sections below the queue
+function rulePlaylistRecommended() {
+  document.querySelectorAll(
+    'ytd-browse ytd-item-section-renderer, ' +
+    'ytd-section-list-renderer > #contents > ytd-item-section-renderer'
+  ).forEach(el => {
+    // Never hide the section that contains the actual playlist video list —
+    // that's what shows Watch Later / Liked Videos / playlist titles.
+    if (el.querySelector('ytd-playlist-video-list-renderer')) return;
+    if (el.style.display !== 'none') el.style.display = 'none';
+  });
+}
+
+// ===== CHANNEL FILTER (home & search cards) =====
+function ruleChannelCards() {
+  const allowed = settings.allowedChannels.map(c => c.toLowerCase().trim()).filter(Boolean);
+  if (!allowed.length) return;
+  // Covers both home (rich-item) and search (video-renderer) cards
+  ['ytd-rich-item-renderer', 'ytd-video-renderer'].forEach(sel => {
+    document.querySelectorAll(sel).forEach(card => {
+      const ch = card.querySelector(
+        'ytd-channel-name a, #channel-name a, #text.ytd-channel-name, .ytd-channel-name'
+      );
+      if (!ch) return;
+      const name = ch.textContent?.trim().toLowerCase() || '';
+      const show = allowed.some(a => name.includes(a));
+      const want = show ? '' : 'none';
+      if (card.style.display !== want) card.style.display = want;
+    });
+  });
+}
+
+// ===== KEYWORD FILTER =====
+function ruleKeywordCards() {
+  const keywords = settings.blockedKeywords.map(k => k.toLowerCase().trim()).filter(Boolean);
+  if (!keywords.length) return;
+  [
+    'ytd-rich-item-renderer',
+    'ytd-video-renderer',
+    'ytd-compact-video-renderer',
+    'ytd-playlist-video-renderer',
+  ].forEach(sel => {
+    document.querySelectorAll(sel).forEach(card => {
+      if (card.style.display === 'none') return;
+      const titleEl = card.querySelector('#video-title, h3 a, a#video-title');
+      if (!titleEl) return;
+      const title = titleEl.textContent?.trim().toLowerCase() || '';
+      if (keywords.some(k => title.includes(k))) card.style.display = 'none';
+    });
+  });
+}
+
+// ===== CHANNEL WHITELIST — WATCH PAGE GATE =====
+let _watchGateDone = false;   // channel resolved for the current watch page
+let _blockPlayback = false;   // while true, any play attempt is paused
+
+// Single capture-phase listener; the flag decides whether it acts, so
+// unblocking (settings change / navigation) doesn't leave a dead player.
+document.addEventListener('play', (e) => {
+  if (_blockPlayback && e.target instanceof HTMLMediaElement) e.target.pause();
+}, { capture: true });
+
+function ruleWatchGate() {
+  if (_watchGateDone) return;
+
+  const chanEl = document.querySelector(
+    '#channel-name a, ytd-channel-name a, #owner #channel-name a, ' +
+    '#upload-info ytd-channel-name a, #owner-name a'
+  );
+  if (!chanEl) return; // channel not rendered yet — next mutation batch retries
+
+  _watchGateDone = true;
+  const chanName = chanEl.textContent?.trim().toLowerCase() || '';
+  // Only check if channel name contains the allowed term, never the reverse —
+  // avoids "tom" matching any channel whose name starts with "t".
+  const allowed = settings.allowedChannels.map(c => c.toLowerCase().trim()).filter(Boolean);
+  const isAllowed = allowed.some(a => chanName.includes(a));
+
+  if (!isAllowed) injectWatchBlockScreen(chanEl.textContent?.trim() || 'this channel');
+}
+
+function injectWatchBlockScreen(channelName) {
+  if (document.getElementById('ytf-watch-block')) return;
+
+  const div = document.createElement('div');
+  div.id = 'ytf-watch-block';
+  div.innerHTML = `
+    <div class="ytf-cmd-window">
+      <div class="ytf-cmd-titlebar">
+        <span class="ytf-cmd-title">C:\\Users\\focus&gt; yt-focus.exe — access denied</span>
+        <div class="ytf-cmd-dots">
+          <span class="ytf-dot ytf-dot-r"></span>
+          <span class="ytf-dot ytf-dot-y"></span>
+          <span class="ytf-dot ytf-dot-g"></span>
+        </div>
+      </div>
+      <div class="ytf-cmd-body">
+        <div class="ytf-line ytf-dim">&gt; checking channel whitelist...</div>
+        <div class="ytf-line" style="color:#ff5f57">&gt; ACCESS DENIED</div>
+        <div class="ytf-line"><span style="color:#606070">channel:</span> <span style="color:#febc2e">${escapeHtmlSimple(channelName)}</span></div>
+        <div class="ytf-line ytf-dim">&gt; this channel is not on your allow-list</div>
+        <div class="ytf-line ytf-dim">──────────────────────────────────────</div>
+        <div class="ytf-line">&gt; add channels via the extension popup → Settings</div>
+        <div class="ytf-line ytf-dim">──────────────────────────────────────</div>
+        <div class="ytf-shortcuts">
+          <a href="#" class="ytf-shortcut" id="ytf-block-back">[← go back]</a>
+          <a href="https://www.youtube.com" class="ytf-shortcut">[home]</a>
+        </div>
+        <div class="ytf-line ytf-dim" style="margin-top:20px;">&gt; C:\\Users\\focus&gt; <span class="ytf-cursor">█</span></div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(div);
+
+  // javascript: URLs are blocked by YouTube's CSP — wire it up properly
+  div.querySelector('#ytf-block-back')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    history.back();
+  });
+
+  // Pause + mute the video so it stops playing in the background
+  _blockPlayback = true;
+  const vid = document.querySelector('video');
+  if (vid) { vid.pause(); vid.muted = true; }
+
+  // Visually hide the player area
+  ['#player', '#movie_player', '#player-container'].forEach(sel => {
+    document.querySelectorAll(sel).forEach(el => { el.style.visibility = 'hidden'; });
+  });
+}
+
+function clearWatchBlock() {
+  _watchGateDone = false;
+  _blockPlayback = false;
+  const wb = document.getElementById('ytf-watch-block');
+  if (wb) wb.remove();
+  ['#player', '#movie_player', '#player-container', 'ytd-watch-flexy'].forEach(sel => {
+    document.querySelectorAll(sel).forEach(el => { el.style.visibility = ''; });
+  });
+}
+
+function escapeHtmlSimple(str) {
+  return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// ===== HOMEPAGE OVERLAY =====
 function injectCmdOverlay() {
   if (document.getElementById('ytf-blank-overlay')) return; // DOM is the single guard
 
@@ -291,52 +452,15 @@ function injectCmdOverlay() {
 }
 
 // ===== AUTOPLAY / END SCREEN =====
-function hideEndScreen() {
-  const END_SCREEN_SELECTORS = [
-    '.ytp-endscreen-content',
-    '.ytp-ce-element',
-    '.ytp-ce-covering-overlay',
-    '.ytp-ce-expanding-overlay',
-    '.ytp-ce-video',
-    '.ytp-ce-playlist',
-    '.ytp-ce-channel',
-    '.html5-endscreen',
-    '.ytp-autonav-endscreen-upnext-container',
-    '.ytp-autonav-endscreen',
-    '.ytp-endscreen-previous',
-    '.ytp-upnext',
-    '.ytp-upnext-autoplay',
-  ];
-
-  const nuke = () => {
-    END_SCREEN_SELECTORS.forEach(sel => {
-      document.querySelectorAll(sel).forEach(el => {
-        el.style.setProperty('display', 'none', 'important');
-        el.style.setProperty('visibility', 'hidden', 'important');
-        el.style.setProperty('opacity', '0', 'important');
-        el.style.setProperty('pointer-events', 'none', 'important');
-      });
-    });
-
-    // Also kill autoplay toggle if it's on
-    const autoBtn = document.querySelector('.ytp-autonav-toggle-button[aria-checked="true"]');
-    if (autoBtn) autoBtn.click();
-  };
-
-  // Run immediately and keep watching
-  nuke();
-  new MutationObserver(nuke).observe(document.documentElement, {
-    childList: true,
-    subtree: true,
-    attributes: true,
-    attributeFilter: ['class', 'style'],
-  });
-}
-
 function disableAutoplay() {
-  hideEndScreen();
+  const tryClick = () => {
+    const btn = document.querySelector('.ytp-autonav-toggle-button[aria-checked="true"]');
+    if (btn) { btn.click(); obs.disconnect(); }
+  };
+  const obs = new MutationObserver(tryClick);
+  obs.observe(document.body, { childList: true, subtree: true });
+  tryClick();
 }
-
 
 // ===== END SCREEN HIDER (persistent) =====
 function hideEndScreenCards() {
@@ -647,7 +771,8 @@ function injectUnlockCountdown(remaining) {
     ].join(';');
     document.documentElement.appendChild(el);
   }
-  el.textContent = `🔓 Lock mode off — browsing unlocked in ${remaining}s`;
+  const text = `🔓 Lock mode off — browsing unlocked in ${remaining}s`;
+  if (el.textContent !== text) el.textContent = text;
 }
 
 function removeUnlockCountdown() {
@@ -655,37 +780,33 @@ function removeUnlockCountdown() {
   if (el) el.remove();
 }
 
+// Interval instead of requestAnimationFrame: rAF burns a check on every frame
+// and is throttled/paused in background tabs, which let locked tabs slip.
 function startLockEnforcer() {
-  if (_lockEnforcerRAF) return; // already running
+  if (_lockTimer) return;
+  _lockTimer = setInterval(enforceLock, 300);
+  enforceLock();
+}
 
-  const enforce = () => {
-    if (!settings.lockMode) {
-      // Lock turned off — check if we're in the grace period
-      const now = Date.now();
-      if (_lockUnlockUntil > now) {
-        const remaining = Math.ceil((_lockUnlockUntil - now) / 1000);
-        injectUnlockCountdown(remaining);
-        injectLockScreen();
-      } else {
-        removeLockScreen();
-        removeUnlockCountdown();
-        _lockEnforcerRAF = null;
-        return; // done
-      }
-    } else {
-      removeUnlockCountdown();
-      injectLockScreen();
-    }
-    _lockEnforcerRAF = requestAnimationFrame(enforce);
-  };
-
-  _lockEnforcerRAF = requestAnimationFrame(enforce);
+function enforceLock() {
+  if (settings.lockMode) {
+    removeUnlockCountdown();
+    injectLockScreen();
+    return;
+  }
+  const now = Date.now();
+  if (_lockUnlockUntil > now) {
+    injectUnlockCountdown(Math.ceil((_lockUnlockUntil - now) / 1000));
+    injectLockScreen();
+  } else {
+    stopLockEnforcer();
+  }
 }
 
 function stopLockEnforcer() {
-  if (_lockEnforcerRAF) {
-    cancelAnimationFrame(_lockEnforcerRAF);
-    _lockEnforcerRAF = null;
+  if (_lockTimer) {
+    clearInterval(_lockTimer);
+    _lockTimer = null;
   }
   removeLockScreen();
   removeUnlockCountdown();
@@ -695,56 +816,33 @@ function stopLockEnforcer() {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'getWatchLater') {
     sendResponse({ videos: extractWatchLaterVideos() });
-    return true;
   }
+  // Settings changes propagate via chrome.storage.onChanged (all tabs);
+  // keep accepting explicit pushes for backwards compatibility.
   if (message.action === 'applyFilters') {
-    const prevLock = settings.lockMode;
     Object.assign(settings, message.settings || {});
-    _lockUnlockUntil = message.lockUnlockUntil || _lockUnlockUntil;
-
-    // Lock mode transitions
-    if (settings.lockMode) {
-      startLockEnforcer();
-    } else if (prevLock && !settings.lockMode) {
-      // Just turned off — enforcer handles countdown then auto-stops
-      startLockEnforcer();
-    } else {
-      stopLockEnforcer();
-    }
-
-    const old = document.getElementById('ytf-blank-overlay');
-    if (old) old.remove();
+    if (message.lockUnlockUntil !== undefined) _lockUnlockUntil = message.lockUnlockUntil;
+    if (settings.lockMode || Date.now() < _lockUnlockUntil) startLockEnforcer();
+    else stopLockEnforcer();
     restoreAll();
-    setTimeout(applyFilters, 100);
+    applyFilters();
     sendResponse({ ok: true });
-    return true;
   }
 });
 
 // ===== RESTORE ALL =====
 function restoreAll() {
-  // Disconnect every registered observer (issue #3)
-  disconnectAllObs();
+  activeRules.clear();
 
   // Restore hidden elements
   ['#comments', '#secondary', 'ytd-rich-grid-renderer',
-    'ytd-watch-next-secondary-results-renderer', 'ytd-item-section-renderer'].forEach(sel => {
+    'ytd-watch-next-secondary-results-renderer', 'ytd-item-section-renderer',
+    'ytd-rich-item-renderer', 'ytd-video-renderer', 'ytd-compact-video-renderer',
+    'ytd-playlist-video-renderer'].forEach(sel => {
       document.querySelectorAll(sel).forEach(el => { el.style.display = ''; });
     });
 
-  // Restore search bar visibility
-  ['#search', 'ytd-searchbox', '#search-form'].forEach(sel => {
-    document.querySelectorAll(sel).forEach(el => {
-      el.style.visibility = ''; el.style.pointerEvents = '';
-    });
-  });
-
-  // Remove watch block screen
-  const wb = document.getElementById('ytf-watch-block');
-  if (wb) wb.remove();
-  ['#player', '#movie_player', '#player-container', 'ytd-watch-flexy'].forEach(sel => {
-    document.querySelectorAll(sel).forEach(el => { el.style.visibility = ''; });
-  });
-
-  _watchGateActive = false;
+  showSearchbar();
+  removeBlankOverlay();
+  clearWatchBlock();
 }
