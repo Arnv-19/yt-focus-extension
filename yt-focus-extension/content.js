@@ -291,15 +291,52 @@ function injectCmdOverlay() {
 }
 
 // ===== AUTOPLAY / END SCREEN =====
-function disableAutoplay() {
-  const tryClick = () => {
-    const btn = document.querySelector('.ytp-autonav-toggle-button[aria-checked="true"]');
-    if (btn) { btn.click(); obs.disconnect(); }
+function hideEndScreen() {
+  const END_SCREEN_SELECTORS = [
+    '.ytp-endscreen-content',
+    '.ytp-ce-element',
+    '.ytp-ce-covering-overlay',
+    '.ytp-ce-expanding-overlay',
+    '.ytp-ce-video',
+    '.ytp-ce-playlist',
+    '.ytp-ce-channel',
+    '.html5-endscreen',
+    '.ytp-autonav-endscreen-upnext-container',
+    '.ytp-autonav-endscreen',
+    '.ytp-endscreen-previous',
+    '.ytp-upnext',
+    '.ytp-upnext-autoplay',
+  ];
+
+  const nuke = () => {
+    END_SCREEN_SELECTORS.forEach(sel => {
+      document.querySelectorAll(sel).forEach(el => {
+        el.style.setProperty('display', 'none', 'important');
+        el.style.setProperty('visibility', 'hidden', 'important');
+        el.style.setProperty('opacity', '0', 'important');
+        el.style.setProperty('pointer-events', 'none', 'important');
+      });
+    });
+
+    // Also kill autoplay toggle if it's on
+    const autoBtn = document.querySelector('.ytp-autonav-toggle-button[aria-checked="true"]');
+    if (autoBtn) autoBtn.click();
   };
-  const obs = new MutationObserver(tryClick);
-  obs.observe(document.body, { childList: true, subtree: true });
-  tryClick();
+
+  // Run immediately and keep watching
+  nuke();
+  new MutationObserver(nuke).observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['class', 'style'],
+  });
 }
+
+function disableAutoplay() {
+  hideEndScreen();
+}
+
 
 // ===== END SCREEN HIDER (persistent) =====
 function hideEndScreenCards() {
