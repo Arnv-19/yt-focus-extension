@@ -10,6 +10,7 @@ let state = {
   hideSidebar: true,
   hideShorts: true,
   focusMode: false,
+  musicMode: true,
   allowedChannels: [],
   blockedChannels: [],
   blockedKeywords: [],
@@ -135,6 +136,7 @@ function showScreen(name) {
     document.getElementById('toggleHideShorts').checked = !!state.hideShorts;
     document.getElementById('dailyLimitInput').value = String(state.dailyLimitMinutes ?? 60);
     document.getElementById('toggleFocusMode').checked = !!state.focusMode;
+    document.getElementById('toggleMusicMode').checked = state.musicMode !== false;
     renderSettingsChips();
   }
 }
@@ -450,6 +452,7 @@ async function handleSaveSettings() {
   state.hideSidebar = document.getElementById('toggleHideSidebar').checked;
   state.hideShorts = document.getElementById('toggleHideShorts').checked;
   state.focusMode = document.getElementById('toggleFocusMode').checked;
+  state.musicMode = document.getElementById('toggleMusicMode').checked;
   const parsedLimit = parseInt(document.getElementById('dailyLimitInput').value.trim(), 10);
   state.dailyLimitMinutes = Number.isNaN(parsedLimit) ? 60 : Math.max(0, parsedLimit);
   await saveState();

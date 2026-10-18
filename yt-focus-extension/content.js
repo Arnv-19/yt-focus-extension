@@ -6,6 +6,7 @@ let settings = {
   hideComments: true,
   hideSidebar: true,
   hideShorts: true,
+  musicMode: true,
   focusMode: false, // Strict Focus Mode toggle
   allowedChannels: [],
   blockedChannels: [],
@@ -211,14 +212,19 @@ function rulePlaylistRecommended() {
 function isChannelPermitted(channelName) {
   const norm = (channelName || '').trim().toLowerCase();
 
-  // 1. If Focus Mode is OFF, everything is permitted by default (unless explicitly blocked)
+  // 1. MUSIC MODE BYPASS: If Music Mode is ON and the user is watching a video inside a playlist (`?list=`), allow it automatically!
+  if (settings.musicMode && new URLSearchParams(location.search).has('list')) {
+    return true;
+  }
+
+  // 2. If Focus Mode is OFF, everything is permitted by default (unless explicitly blocked)
   if (!settings.focusMode) {
     const blocked = settings.blockedChannels.map(c => c.toLowerCase().trim()).filter(Boolean);
     if (blocked.some(b => norm.includes(b.replace(/^@/, '')))) return false;
-    return true; // Never block unwhitelisted channels when Focus Mode is off!
+    return true;
   }
 
-  // 2. If Focus Mode is ON, it must be explicitly on the allow-list
+  // 3. If Focus Mode is ON, it must be explicitly on the allow-list
   if (!norm) return false;
   const blocked = settings.blockedChannels.map(c => c.toLowerCase().trim()).filter(Boolean);
   if (blocked.some(b => norm.includes(b.replace(/^@/, '')))) return false;
@@ -226,7 +232,6 @@ function isChannelPermitted(channelName) {
   const allowed = settings.allowedChannels.map(c => c.toLowerCase().trim()).filter(Boolean);
   return allowed.some(a => norm.includes(a.replace(/^@/, '')));
 }
-
 function ruleChannelCards() {
   ['ytd-rich-item-renderer', 'ytd-video-renderer', 'ytd-compact-video-renderer'].forEach(sel => {
     document.querySelectorAll(sel).forEach(card => {
