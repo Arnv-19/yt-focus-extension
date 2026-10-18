@@ -1,15 +1,17 @@
 {
   "manifest_version": 3,
-  "name": "YT Focus — Text Only Mode",
-  "version": "1.1.0",
-  "description": "Distraction-free YouTube: text-only titles, productive mode, channel filter, AI content filtering.",
+  "name": "YT Focus v2.0 — Interactive CLI",
+  "version": "2.0.0",
+  "description": "Distraction-free YouTube: interactive CLI, instant playlist sync, 1-click channel allow/block, custom productive feeds.",
   "permissions": [
     "storage",
     "tabs",
     "activeTab",
-    "scripting"
+    "scripting",
+    "alarms"
   ],
   "host_permissions": [
+    "https://www.youtube.com/*",
     "https://www.googleapis.com/*",
     "https://youtube.googleapis.com/*",
     "https://api.anthropic.com/*"
@@ -32,11 +34,17 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://www.youtube.com/*"],
-      "js": ["content.js"],
-      "css": ["content.css"],
+      "matches": [
+        "https://www.youtube.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "content.css"
+      ],
       "run_at": "document_idle",
-      "all_frames": true
+      "all_frames": false
     }
   ]
 }

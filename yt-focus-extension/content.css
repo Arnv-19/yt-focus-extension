@@ -1,9 +1,4 @@
-/* ===== YT FOCUS — CONTENT CSS ===== */
-/* Injected into every youtube.com page */
-
-/* ================================================================
-   END-SCREEN CARDS & AUTOPLAY — hide all post-video rabbit holes
-   ================================================================ */
+/* ===== YT FOCUS v2.0 — CONTENT CSS ===== */
 
 .ytp-endscreen-content,
 .ytp-ce-element,
@@ -16,72 +11,66 @@
 .ytp-autonav-endscreen,
 .ytp-endscreen-previous,
 .ytp-upnext,
-.ytp-upnext-autoplay { display: none !important; }
+.ytp-upnext-autoplay,
+yt-endscreen-renderer,
+ytd-endscreen-renderer,
+.html5-endscreen {
+  display: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
 
-/* ================================================================
-   SIDEBAR RELATED / RECOMMENDED VIDEOS — always hidden on watch pages
-   ================================================================ */
+/* ===== YT FOCUS — PRECISE SEARCH AD KILLER ===== */
+ytd-promoted-sparkles-web-renderer,
+ytd-promoted-sparkles-text-search-renderer,
+ytd-search-pyv-renderer,
+ytd-in-feed-ad-layout-renderer,
+#masthead-ad {
+  display: none !important;
+  height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
 
-/* The "Up Next" related videos panel in the right sidebar */
-ytd-watch-next-secondary-results-renderer { display: none !important; }
+/* ===== YT FOCUS — KILL SEARCH PROMOTIONAL BANNERS ===== */
+ytd-search-pyv-renderer,
+ytd-promoted-sparkles-text-search-renderer,
+ytd-statement-banner-renderer,
+ytd-in-feed-ad-layout-renderer,
+#masthead-ad,
+ytd-banner-promo-renderer {
+  display: none !important;
+  height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  visibility: hidden !important;
+}
 
-/* Individual compact video cards in the sidebar (catches any stragglers) */
-#secondary ytd-compact-video-renderer { display: none !important; }
-#secondary ytd-compact-radio-renderer  { display: none !important; }
-#secondary ytd-shelf-renderer          { display: none !important; }
-
-/* ================================================================
-   THUMBNAIL & IMAGE REMOVAL — text-only mode across all YT pages
-   ================================================================ */
-
-
-/* Hide all video thumbnails */
-ytd-thumbnail,
-#thumbnail.ytd-playlist-video-renderer,
-#thumbnail.ytd-video-renderer,
-#thumbnail.ytd-grid-video-renderer,
-#thumbnail.ytd-compact-video-renderer,
-ytd-playlist-thumbnail,
-ytd-movie-renderer ytd-thumbnail,
-ytd-rich-item-renderer ytd-thumbnail,
-ytd-video-renderer ytd-thumbnail,
-ytd-compact-video-renderer ytd-thumbnail,
-ytd-grid-video-renderer ytd-thumbnail,
-ytd-playlist-video-renderer ytd-thumbnail {
+html.ytf-hide-thumbnails ytd-thumbnail,
+html.ytf-hide-thumbnails #thumbnail.ytd-playlist-video-renderer,
+html.ytf-hide-thumbnails #thumbnail.ytd-video-renderer,
+html.ytf-hide-thumbnails #thumbnail.ytd-grid-video-renderer,
+html.ytf-hide-thumbnails #thumbnail.ytd-compact-video-renderer,
+html.ytf-hide-thumbnails ytd-playlist-thumbnail,
+html.ytf-hide-thumbnails ytd-rich-item-renderer ytd-thumbnail,
+html.ytf-hide-thumbnails ytd-video-renderer ytd-thumbnail,
+html.ytf-hide-thumbnails yt-thumbnail-view-model,
+html.ytf-hide-thumbnails ytd-video-renderer #channel-thumbnail,
+html.ytf-hide-thumbnails ytd-rich-item-renderer #channel-thumbnail,
+html.ytf-hide-thumbnails #avatar-link.ytd-rich-grid-media {
   display: none !important;
 }
 
-/* Hide channel avatars in video cards */
-ytd-video-renderer #channel-thumbnail,
-ytd-rich-item-renderer #channel-thumbnail,
-ytd-compact-video-renderer #channel-thumbnail,
-ytd-playlist-video-renderer yt-img-shadow {
-  display: none !important;
-}
-
-/* Hide preview hover thumbnails */
-ytd-moving-thumbnail-renderer,
-ytd-thumbnail-overlay-resume-playback-renderer,
-ytd-thumbnail-overlay-time-status-renderer,
-ytd-thumbnail-overlay-toggle-button-renderer,
-ytd-thumbnail-overlay-now-playing-renderer,
-ytd-thumbnail-overlay-bottom-panel-renderer,
-ytd-thumbnail-overlay-loading-preview-renderer {
-  display: none !important;
-}
-
-/* Make video cards row-only (no grid layout shift from missing thumbnails) */
-ytd-video-renderer #dismissible,
-ytd-rich-item-renderer #content {
+html.ytf-hide-thumbnails ytd-video-renderer #dismissible,
+html.ytf-hide-thumbnails ytd-rich-item-renderer #content {
   display: block !important;
 }
 
-/* Style the remaining title links to look clean */
-ytd-video-renderer #video-title,
-ytd-rich-item-renderer #video-title,
-ytd-compact-video-renderer #video-title,
-ytd-grid-video-renderer #video-title,
-ytd-playlist-video-renderer #video-title {
+html.ytf-hide-thumbnails ytd-video-renderer #video-title,
+html.ytf-hide-thumbnails ytd-rich-item-renderer #video-title,
+html.ytf-hide-thumbnails ytd-compact-video-renderer #video-title,
+html.ytf-hide-thumbnails ytd-grid-video-renderer #video-title,
+html.ytf-hide-thumbnails ytd-playlist-video-renderer #video-title {
   font-family: 'IBM Plex Mono', 'Courier New', monospace !important;
   font-size: 13px !important;
   font-weight: 500 !important;
@@ -90,33 +79,78 @@ ytd-playlist-video-renderer #video-title {
   white-space: normal !important;
   line-height: 1.5 !important;
 }
-ytd-video-renderer #video-title:hover,
-ytd-rich-item-renderer #video-title:hover,
-ytd-compact-video-renderer #video-title:hover,
-ytd-grid-video-renderer #video-title:hover,
-ytd-playlist-video-renderer #video-title:hover {
+
+html.ytf-hide-thumbnails ytd-video-renderer #video-title:hover,
+html.ytf-hide-thumbnails ytd-rich-item-renderer #video-title:hover,
+html.ytf-hide-thumbnails ytd-playlist-video-renderer #video-title:hover {
   color: #00d4aa !important;
 }
 
-/* Compact the cards since no thumbnail takes space */
-ytd-video-renderer,
-ytd-rich-item-renderer,
-ytd-playlist-video-renderer,
-ytd-compact-video-renderer {
+html.ytf-hide-thumbnails ytd-video-renderer,
+html.ytf-hide-thumbnails ytd-rich-item-renderer,
+html.ytf-hide-thumbnails ytd-playlist-video-renderer {
   padding: 6px 0 !important;
   border-bottom: 1px solid #1e1e22 !important;
 }
 
-/* Hide watch progress bars on thumbnails (not needed without thumbnails) */
-#progress.ytd-thumbnail-overlay-resume-playback-renderer { display: none !important; }
+/* 1-Click Channel Action Pills & Channel Page Banner */
+.ytf-chan-actions {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  margin-left: 8px !important;
+  vertical-align: middle !important;
+  z-index: 999 !important;
+}
 
+#ytf-channel-page-bar {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  padding: 10px 24px !important;
+  background: #111115 !important;
+  border-bottom: 1px solid #00d4aa !important;
+  font-family: 'IBM Plex Mono', monospace !important;
+  font-size: 12px !important;
+  color: #e8e8ec !important;
+}
 
+.ytf-pill-btn {
+  background: #141418 !important;
+  border: 1px solid #2e2e38 !important;
+  color: #9090a0 !important;
+  font-family: 'IBM Plex Mono', 'Courier New', monospace !important;
+  font-size: 11px !important;
+  line-height: 1 !important;
+  padding: 4px 8px !important;
+  cursor: pointer !important;
+  border-radius: 2px !important;
+}
 
-/* ---- Blank Homepage CMD Overlay ---- */
+.ytf-pill-btn.allow:hover,
+.ytf-pill-btn.allow.is-active {
+  border-color: #00d4aa !important;
+  color: #00d4aa !important;
+  background: rgba(0, 212, 170, 0.15) !important;
+}
 
+.ytf-pill-btn.block:hover,
+.ytf-pill-btn.block.is-active {
+  border-color: #ff4466 !important;
+  color: #ff4466 !important;
+  background: rgba(255, 68, 102, 0.15) !important;
+}
+
+.ytf-pill-btn.cat:hover {
+  border-color: #febc2e !important;
+  color: #febc2e !important;
+  background: rgba(254, 188, 46, 0.15) !important;
+}
+
+/* Interactive Homepage Overlay */
 #ytf-blank-overlay {
   position: fixed;
-  top: 56px; /* below YT masthead */
+  top: 56px;
   left: 0;
   right: 0;
   bottom: 0;
@@ -124,25 +158,18 @@ ytd-compact-video-renderer {
   align-items: center;
   justify-content: center;
   background: #0a0a0b;
-  z-index: 9000;
+  z-index: 2020;
   font-family: 'IBM Plex Mono', 'Courier New', Courier, monospace;
-  animation: ytf-fade-in 0.3s ease;
-}
-
-@keyframes ytf-fade-in {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
 }
 
 .ytf-cmd-window {
-  width: 520px;
+  width: 620px;
   max-width: 94vw;
   border: 1px solid #2a2a2f;
   background: #0f0f10;
-  box-shadow: 0 0 60px rgba(0, 212, 170, 0.06), 0 20px 60px rgba(0,0,0,0.8);
+  box-shadow: 0 0 60px rgba(0, 212, 170, 0.08), 0 20px 60px rgba(0, 0, 0, 0.85);
 }
 
-/* Title bar */
 .ytf-cmd-titlebar {
   display: flex;
   align-items: center;
@@ -154,11 +181,14 @@ ytd-compact-video-renderer {
 
 .ytf-cmd-title {
   font-size: 11px;
-  color: #606070;
+  color: #00d4aa;
   letter-spacing: 0.04em;
 }
 
-.ytf-cmd-dots { display: flex; gap: 6px; }
+.ytf-cmd-dots {
+  display: flex;
+  gap: 6px;
+}
 
 .ytf-dot {
   width: 10px;
@@ -166,13 +196,21 @@ ytd-compact-video-renderer {
   border-radius: 50%;
   display: inline-block;
 }
-.ytf-dot-r { background: #ff5f57; }
-.ytf-dot-y { background: #febc2e; }
-.ytf-dot-g { background: #28c840; }
 
-/* Body */
+.ytf-dot-r {
+  background: #ff5f57;
+}
+
+.ytf-dot-y {
+  background: #febc2e;
+}
+
+.ytf-dot-g {
+  background: #28c840;
+}
+
 .ytf-cmd-body {
-  padding: 20px 24px 24px;
+  padding: 18px 22px 22px;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -182,70 +220,111 @@ ytd-compact-video-renderer {
   font-size: 12px;
   color: #e8e8ec;
   letter-spacing: 0.03em;
-  line-height: 1.6;
+  line-height: 1.55;
 }
 
-.ytf-dim  { color: #404050 !important; }
-.ytf-green { color: #00d4aa !important; }
+.ytf-dim {
+  color: #555566 !important;
+}
 
-/* Shortcuts row */
+.ytf-green {
+  color: #00d4aa !important;
+}
+
+.ytf-red {
+  color: #ff4466 !important;
+}
+
+.ytf-yellow {
+  color: #febc2e !important;
+}
+
+.ytf-status-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 16px;
+  margin: 6px 0;
+  padding: 8px 12px;
+  background: #141417;
+  border: 1px solid #222228;
+}
+
 .ytf-shortcuts {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 10px;
+  gap: 6px;
+  margin-top: 6px;
 }
 
 .ytf-shortcut {
-  font-family: 'IBM Plex Mono', 'Courier New', monospace;
+  font-family: 'IBM Plex Mono', monospace;
   font-size: 11px;
   color: #00d4aa;
   text-decoration: none;
   border: 1px solid #1e3d38;
   padding: 4px 10px;
-  background: rgba(0, 212, 170, 0.04);
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
-  letter-spacing: 0.04em;
+  background: rgba(0, 212, 170, 0.05);
+  cursor: pointer;
 }
+
 .ytf-shortcut:hover {
-  background: rgba(0, 212, 170, 0.12);
+  background: rgba(0, 212, 170, 0.15);
   border-color: #00d4aa;
   color: #00ffcc;
 }
 
-/* Blinking cursor */
-.ytf-cursor {
-  animation: ytf-blink 1s step-start infinite;
-  color: #00d4aa;
-}
-@keyframes ytf-blink {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0; }
+.ytf-cli-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: #141418;
+  border: 1px solid #00d4aa;
 }
 
-/* ================================================================
-   WATCH-PAGE CHANNEL BLOCK SCREEN
-   ================================================================ */
+.ytf-cli-prompt {
+  color: #00d4aa;
+  font-size: 12px;
+  font-weight: bold;
+  white-space: nowrap;
+}
+
+.ytf-cli-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #ffffff;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+}
+
+.ytf-cli-submit {
+  background: #00d4aa;
+  color: #0a0a0b;
+  border: none;
+  padding: 4px 10px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.ytf-cli-feedback {
+  font-size: 11px;
+  color: #febc2e;
+  min-height: 16px;
+  margin-top: 4px;
+}
 
 #ytf-watch-block {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   background: #0a0a0b;
   z-index: 99999;
-  font-family: 'IBM Plex Mono', 'Courier New', Courier, monospace;
-  animation: ytf-fade-in 0.3s ease;
+  font-family: 'IBM Plex Mono', monospace;
 }
-
-/* ================================================================
-   HOMEPAGE SEARCH BAR HIDE — prevent voice-search ghost icon
-   ================================================================ */
-
-/* Voice search button can become an orphan float when we hide the bar */
-#voice-search-button { display: none !important; }
-
