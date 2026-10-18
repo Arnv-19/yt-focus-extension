@@ -7,6 +7,7 @@ let settings = {
   hideSidebar: true,
   hideShorts: true,
   musicMode: true,
+  musicPlaylists: [],
   focusMode: false, // Strict Focus Mode toggle
   allowedChannels: [],
   blockedChannels: [],
@@ -209,11 +210,44 @@ function rulePlaylistRecommended() {
   });
 }
 
+function extractPlaylistId(input) {
+  if (!input) return '';
+  const str = String(input).trim();
+  try {
+    if (str.includes('list=')) {
+      const url = str.startsWith('http') ? new URL(str) : new URL('https://www.youtube.com/' + (str.startsWith('?') ? str : '?' + str));
+      return url.searchParams.get('list') || str;
+    }
+  } catch (_) {}
+  return str.replace(/[^a-zA-Z0-9_\-]/g, '');
+}
+
+function isPlaylistPermitted(listId) {
+  if (!settings.musicMode) return false;
+  if (!listId) return false;
+
+  const allowed = settings.musicPlaylists || [];
+  // If no specific music playlists are defined, allow any playlist in music mode
+  if (allowed.length === 0) return true;
+
+  const cleanListId = listId.trim();
+  return allowed.some(p => {
+    if (!p) return false;
+    if (typeof p === 'string') {
+      const pid = extractPlaylistId(p);
+      return pid === cleanListId || p.trim() === cleanListId;
+    }
+    const pid = p.id || extractPlaylistId(p.url || '');
+    return pid === cleanListId;
+  });
+}
+
 function isChannelPermitted(channelName) {
   const norm = (channelName || '').trim().toLowerCase();
+  const currentList = new URLSearchParams(location.search).get('list');
 
-  // 1. MUSIC MODE BYPASS: If Music Mode is ON and the user is watching a video inside a playlist (`?list=`), allow it automatically!
-  if (settings.musicMode && new URLSearchParams(location.search).has('list')) {
+  // 1. MUSIC MODE BYPASS: If Music Mode is ON and the current playlist is permitted
+  if (settings.musicMode && currentList && isPlaylistPermitted(currentList)) {
     return true;
   }
 
@@ -341,6 +375,11 @@ function ruleWatchGate() {
 
 function injectWatchBlockScreen(channelName) {
   if (document.getElementById('ytf-watch-block')) return;
+  const currentList = new URLSearchParams(location.search).get('list');
+  const playlistBtnHtml = (settings.musicMode && currentList && !isPlaylistPermitted(currentList))
+    ? `<button type="button" class="ytf-shortcut" id="ytf-quick-allow-playlist" style="color:var(--yellow,#ffcc00);border-color:var(--yellow,#ffcc00);margin-left:6px;">[+ 🎵 allow playlist in music mode]</button>`
+    : '';
+
   const div = document.createElement('div');
   div.id = 'ytf-watch-block';
   div.innerHTML = `
@@ -349,17 +388,33 @@ function injectWatchBlockScreen(channelName) {
       <div class="ytf-cmd-body">
         <div class="ytf-line ytf-red">> ACCESS DENIED ${settings.focusMode ? '(FOCUS MODE ACTIVE)' : ''}</div>
         <div class="ytf-line">channel: <span class="ytf-yellow">${escapeHtmlSimple(channelName)}</span></div>
+        ${currentList ? `<div class="ytf-line">playlist: <span class="ytf-yellow">${escapeHtmlSimple(currentList)}</span> (not on music whitelist)</div>` : ''}
         <div class="ytf-line ytf-dim">> this channel is not on your allowed whitelist.</div>
         <div class="ytf-shortcuts" style="margin-top:14px;">
           <a href="#" class="ytf-shortcut" id="ytf-block-back">[← go back]</a>
           <a href="https://www.youtube.com" class="ytf-shortcut">[home]</a>
           <button type="button" class="ytf-shortcut" id="ytf-quick-allow">[+ whitelist "${escapeHtmlSimple(channelName)}"]</button>
+          ${playlistBtnHtml}
         </div>
       </div>
     </div>
   `;
   document.body.appendChild(div);
   div.querySelector('#ytf-block-back')?.addEventListener('click', (e) => { e.preventDefault(); history.back(); });
+
+  div.querySelector('#ytf-quick-allow-playlist')?.addEventListener('click', () => {
+    chrome.storage.local.get(['musicPlaylists'], (data) => {
+      let list = data.musicPlaylists || [];
+      const pid = currentList;
+      if (!list.some(p => (typeof p === 'object' ? p.id : extractPlaylistId(p)) === pid)) {
+        list.push({ name: 'playlist (' + pid.slice(0, 8) + ')', id: pid, url: location.href });
+        chrome.storage.local.set({ musicPlaylists: list }, () => {
+          clearWatchBlock();
+          location.reload();
+        });
+      }
+    });
+  });
 
   // Double-ask confirmation prompt before whitelisting when Focus Mode is on
   div.querySelector('#ytf-quick-allow')?.addEventListener('click', () => {
@@ -497,8 +552,21 @@ function stopLockEnforcer() {
   document.getElementById('ytf-lock-screen')?.remove();
 }
 
+function getCurrentPlaylistInfo() {
+  const listId = new URLSearchParams(location.search).get('list');
+  if (!listId) return null;
+  const titleEl = document.querySelector('ytd-watch-flexy ytd-playlist-panel-renderer #header-description h3, ytd-playlist-header-renderer .title, h1#title');
+  const title = titleEl ? titleEl.textContent?.trim() : '';
+  return { id: listId, title: title || listId };
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === 'getCurrentChannel') sendResponse({ channel: getCurrentChannelName() });
+  if (message.action === 'getCurrentChannel') {
+    sendResponse({
+      channel: getCurrentChannelName(),
+      playlist: getCurrentPlaylistInfo()
+    });
+  }
 });
 
 function restoreAll() {

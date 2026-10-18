@@ -27,6 +27,7 @@
       </div>
       <div class="time-segment" id="currentChanBar" style="margin-left:auto; display:none;">
         <button class="btn-xs" id="quickAllowCurrentBtn">+ allow tab</button>
+        <button class="btn-xs" id="quickAllowPlaylistBtn" style="display:none; color:var(--yellow); border-color:var(--yellow);">+ 🎵 music</button>
         <button class="btn-xs danger" id="quickBlockCurrentBtn">✕ block</button>
       </div>
     </div>
@@ -160,6 +161,36 @@
           <label class="toggle-label"><input type="checkbox" id="toggleHideShorts" checked><span
               class="toggle"></span></label>
         </div>
+        <div class="setting-group setting-row">
+          <span class="setting-row-label">strict focus mode (whitelist only)</span>
+          <label class="toggle-label">
+            <input type="checkbox" id="toggleFocusMode">
+            <span class="toggle"></span>
+          </label>
+        </div>
+        <div class="setting-group setting-row">
+          <span class="setting-row-label">music mode (bypass focus on playlists)</span>
+          <label class="toggle-label">
+            <input type="checkbox" id="toggleMusicMode" checked>
+            <span class="toggle"></span>
+          </label>
+        </div>
+
+        <div class="setting-section-title">&gt; music mode playlists (whitelist: empty = allow all)</div>
+        <div class="setting-group">
+          <div class="mini-row">
+            <input type="text" id="newMusicPlaylistName" placeholder="name (e.g. lofi study)">
+            <input type="text" id="newMusicPlaylistUrl" placeholder="playlist URL or ID">
+            <button class="btn-sm" id="addMusicPlaylistBtn">+ Add</button>
+          </div>
+          <div class="mini-row" id="addSavedToMusicRow" style="margin-top: 4px;">
+            <select id="selectSavedForMusic" class="select-input" style="flex:1;">
+              <option value="">-- add from saved playlists --</option>
+            </select>
+            <button class="btn-sm" id="addSavedToMusicBtn">+ Add to Music</button>
+          </div>
+          <div id="musicPlaylistsChips" class="chip-list"></div>
+        </div>
 
         <div class="setting-section-title">&gt; daily watch time budget</div>
         <div class="setting-group setting-row">
@@ -227,13 +258,6 @@
         <button class="btn-primary" id="saveSettingsBtn">Save Settings</button>
         <button class="btn-danger" id="clearDataBtn">Reset All Data</button>
       </div>
-    </div>
-    <div class="setting-group setting-row">
-      <span class="setting-row-label">strict focus mode (whitelist only)</span>
-      <label class="toggle-label">
-        <input type="checkbox" id="toggleFocusMode">
-        <span class="toggle"></span>
-      </label>
     </div>
 
     <div id="loadingOverlay" class="loading hidden">

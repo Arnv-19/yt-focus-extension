@@ -11,6 +11,7 @@ let state = {
   hideShorts: true,
   focusMode: false,
   musicMode: true,
+  musicPlaylists: [],
   allowedChannels: [],
   blockedChannels: [],
   blockedKeywords: [],
@@ -29,6 +30,19 @@ let state = {
 };
 
 let currentTabChannel = '';
+let currentTabPlaylist = null;
+
+function extractPlaylistId(input) {
+  if (!input) return '';
+  const str = String(input).trim();
+  try {
+    if (str.includes('list=')) {
+      const url = str.startsWith('http') ? new URL(str) : new URL('https://www.youtube.com/' + (str.startsWith('?') ? str : '?' + str));
+      return url.searchParams.get('list') || str;
+    }
+  } catch (_) {}
+  return str.replace(/[^a-zA-Z0-9_\-]/g, '');
+}
 
 document.addEventListener('DOMContentLoaded', async () => {
   await loadState();
@@ -76,14 +90,44 @@ async function detectActiveTabChannel() {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab?.id || !tab.url?.includes('youtube.com/')) return;
+
+    try {
+      const u = new URL(tab.url);
+      const listId = u.searchParams.get('list');
+      if (listId) {
+        currentTabPlaylist = { id: listId, url: tab.url, title: 'playlist (' + listId.slice(0, 6) + '...)' };
+        const bar = document.getElementById('currentChanBar');
+        const plBtn = document.getElementById('quickAllowPlaylistBtn');
+        if (bar && plBtn) {
+          bar.style.display = 'flex';
+          plBtn.style.display = 'inline-block';
+          const isAdded = (state.musicPlaylists || []).some(p => (typeof p === 'object' ? p.id : extractPlaylistId(p)) === listId);
+          plBtn.textContent = isAdded ? '✓ 🎵 music' : '+ 🎵 music';
+        }
+      }
+    } catch (_) {}
+
     chrome.tabs.sendMessage(tab.id, { action: 'getCurrentChannel' }, (res) => {
-      if (chrome.runtime.lastError || !res?.channel) return;
-      currentTabChannel = res.channel;
-      const bar = document.getElementById('currentChanBar');
-      const allowBtn = document.getElementById('quickAllowCurrentBtn');
-      if (bar && allowBtn) {
-        bar.style.display = 'flex';
-        allowBtn.textContent = '+ allow "' + currentTabChannel.slice(0, 14) + '"';
+      if (chrome.runtime.lastError || !res) return;
+      if (res.channel) {
+        currentTabChannel = res.channel;
+        const bar = document.getElementById('currentChanBar');
+        const allowBtn = document.getElementById('quickAllowCurrentBtn');
+        if (bar && allowBtn) {
+          bar.style.display = 'flex';
+          allowBtn.textContent = '+ allow "' + currentTabChannel.slice(0, 14) + '"';
+        }
+      }
+      if (res.playlist && res.playlist.id) {
+        currentTabPlaylist = { id: res.playlist.id, url: tab.url, title: res.playlist.title || res.playlist.id };
+        const bar = document.getElementById('currentChanBar');
+        const plBtn = document.getElementById('quickAllowPlaylistBtn');
+        if (bar && plBtn) {
+          bar.style.display = 'flex';
+          plBtn.style.display = 'inline-block';
+          const isAdded = (state.musicPlaylists || []).some(p => (typeof p === 'object' ? p.id : extractPlaylistId(p)) === res.playlist.id);
+          plBtn.textContent = isAdded ? '✓ 🎵 music' : '+ 🎵 music';
+        }
       }
     });
   } catch (_) { }
@@ -126,17 +170,30 @@ function showScreen(name) {
   if (name === 'setup') document.getElementById('setupScreen').classList.remove('hidden');
   if (name === 'main') document.getElementById('mainScreen').classList.remove('hidden');
   if (name === 'settings') {
-    document.getElementById('settingsPanel').classList.remove('hidden');
-    document.getElementById('ytKeyEdit').value = state.ytApiKey || '';
-    document.getElementById('anthropicKeyEdit').value = state.anthropicKey || '';
-    document.getElementById('toggleHideThumbnails').checked = !!state.hideThumbnails;
-    document.getElementById('toggleBlankHomepage').checked = !!state.blankHomepage;
-    document.getElementById('toggleHideComments').checked = !!state.hideComments;
-    document.getElementById('toggleHideSidebar').checked = !!state.hideSidebar;
-    document.getElementById('toggleHideShorts').checked = !!state.hideShorts;
-    document.getElementById('dailyLimitInput').value = String(state.dailyLimitMinutes ?? 60);
-    document.getElementById('toggleFocusMode').checked = !!state.focusMode;
-    document.getElementById('toggleMusicMode').checked = state.musicMode !== false;
+    document.getElementById('settingsPanel')?.classList.remove('hidden');
+    const ytKeyEl = document.getElementById('ytKeyEdit');
+    if (ytKeyEl) ytKeyEl.value = state.ytApiKey || '';
+    const anthropicKeyEl = document.getElementById('anthropicKeyEdit');
+    if (anthropicKeyEl) anthropicKeyEl.value = state.anthropicKey || '';
+    const hideThumbnailsEl = document.getElementById('toggleHideThumbnails');
+    if (hideThumbnailsEl) hideThumbnailsEl.checked = !!state.hideThumbnails;
+    const blankHomepageEl = document.getElementById('toggleBlankHomepage');
+    if (blankHomepageEl) blankHomepageEl.checked = !!state.blankHomepage;
+    const hideCommentsEl = document.getElementById('toggleHideComments');
+    if (hideCommentsEl) hideCommentsEl.checked = !!state.hideComments;
+    const hideSidebarEl = document.getElementById('toggleHideSidebar');
+    if (hideSidebarEl) hideSidebarEl.checked = !!state.hideSidebar;
+    const hideShortsEl = document.getElementById('toggleHideShorts');
+    if (hideShortsEl) hideShortsEl.checked = !!state.hideShorts;
+    const dailyLimitEl = document.getElementById('dailyLimitInput');
+    if (dailyLimitEl) dailyLimitEl.value = String(state.dailyLimitMinutes ?? 60);
+
+    const focusToggle = document.getElementById('toggleFocusMode');
+    if (focusToggle) focusToggle.checked = !!state.focusMode;
+
+    const musicToggle = document.getElementById('toggleMusicMode');
+    if (musicToggle) musicToggle.checked = state.musicMode !== false;
+
     renderSettingsChips();
   }
 }
@@ -242,12 +299,17 @@ function renderProductiveManager() {
 function renderSettingsChips() {
   const plContainer = document.getElementById('savedPlaylistsChips');
   if (plContainer) {
-    plContainer.innerHTML = (state.savedPlaylists || []).map((pl, idx) => `
-      <span class="chip">
-        <span>${escapeHtml(pl.name)}</span>
-        <button class="chip-del" data-del-pl="${idx}">×</button>
-      </span>
-    `).join('');
+    plContainer.innerHTML = (state.savedPlaylists || []).map((pl, idx) => {
+      const plId = extractPlaylistId(pl.url);
+      const inMusic = (state.musicPlaylists || []).some(m => (typeof m === 'object' ? m.id : extractPlaylistId(m)) === plId);
+      return `
+        <span class="chip">
+          <span>${escapeHtml(pl.name)}</span>
+          ${inMusic ? '<span style="color:var(--yellow);font-size:9px;margin-left:4px;">[🎵 music]</span>' : ''}
+          <button class="chip-del" data-del-pl="${idx}">×</button>
+        </span>
+      `;
+    }).join('');
     plContainer.querySelectorAll('[data-del-pl]').forEach(btn => {
       btn.addEventListener('click', () => {
         state.savedPlaylists.splice(Number(btn.dataset.delPl), 1);
@@ -255,6 +317,37 @@ function renderSettingsChips() {
         renderPlaylistsDropdown();
       });
     });
+  }
+
+  const musicPlContainer = document.getElementById('musicPlaylistsChips');
+  if (musicPlContainer) {
+    const list = state.musicPlaylists || [];
+    if (list.length === 0) {
+      musicPlContainer.innerHTML = '<span style="font-family:var(--mono);font-size:10px;color:var(--text3);">(all playlists bypassed when empty)</span>';
+    } else {
+      musicPlContainer.innerHTML = list.map((pl, idx) => {
+        const name = typeof pl === 'object' ? (pl.name || pl.id || 'playlist') : pl;
+        return `
+          <span class="chip" style="color:var(--yellow); border-color:var(--yellow);">
+            <span>🎵 ${escapeHtml(name)}</span>
+            <button class="chip-del" data-del-music-pl="${idx}">×</button>
+          </span>
+        `;
+      }).join('');
+      musicPlContainer.querySelectorAll('[data-del-music-pl]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.musicPlaylists.splice(Number(btn.dataset.delMusicPl), 1);
+          renderSettingsChips();
+        });
+      });
+    }
+  }
+
+  const selSaved = document.getElementById('selectSavedForMusic');
+  if (selSaved) {
+    const saved = state.savedPlaylists || [];
+    selSaved.innerHTML = '<option value="">-- add from saved playlists --</option>' +
+      saved.map((pl, idx) => `<option value="${idx}">${escapeHtml(pl.name)}</option>`).join('');
   }
 
   renderSimpleChipList('allowedChannelsChips', state.allowedChannels, (val) => {
@@ -360,6 +453,86 @@ function setupEventListeners() {
     renderSettingsChips();
   });
 
+  const quickAllowPlBtn = document.getElementById('quickAllowPlaylistBtn');
+  if (quickAllowPlBtn) {
+    quickAllowPlBtn.addEventListener('click', async () => {
+      if (!currentTabPlaylist || !currentTabPlaylist.id) return;
+      if (!state.musicPlaylists) state.musicPlaylists = [];
+      const pid = currentTabPlaylist.id;
+      const exists = state.musicPlaylists.some(p => (typeof p === 'object' ? p.id : extractPlaylistId(p)) === pid);
+      if (!exists) {
+        state.musicPlaylists.push({
+          name: currentTabPlaylist.title || pid,
+          id: pid,
+          url: currentTabPlaylist.url
+        });
+        await saveState();
+        quickAllowPlBtn.textContent = '✓ 🎵 music';
+        showStatus('Playlist added to Music Mode!', 'success');
+      } else {
+        showStatus('Playlist already in Music Mode', 'success');
+      }
+    });
+  }
+
+  const addMusicPlBtn = document.getElementById('addMusicPlaylistBtn');
+  if (addMusicPlBtn) {
+    addMusicPlBtn.addEventListener('click', () => {
+      const nameInput = document.getElementById('newMusicPlaylistName');
+      const urlInput = document.getElementById('newMusicPlaylistUrl');
+      const name = nameInput.value.trim();
+      const rawUrl = urlInput.value.trim();
+      if (!rawUrl) return;
+
+      const id = extractPlaylistId(rawUrl);
+      if (!id) return;
+
+      if (!state.musicPlaylists) state.musicPlaylists = [];
+      const exists = state.musicPlaylists.some(p => (typeof p === 'object' ? p.id : extractPlaylistId(p)) === id);
+      if (!exists) {
+        state.musicPlaylists.push({
+          name: name || id,
+          id: id,
+          url: rawUrl.startsWith('http') ? rawUrl : 'https://www.youtube.com/playlist?list=' + encodeURIComponent(id)
+        });
+        nameInput.value = '';
+        urlInput.value = '';
+        renderSettingsChips();
+        showStatus('Music playlist added!', 'success');
+      } else {
+        showStatus('Playlist already in music mode', 'error');
+      }
+    });
+  }
+
+  const addSavedMusicBtn = document.getElementById('addSavedToMusicBtn');
+  if (addSavedMusicBtn) {
+    addSavedMusicBtn.addEventListener('click', () => {
+      const sel = document.getElementById('selectSavedForMusic');
+      if (!sel || !sel.value) return;
+      const saved = state.savedPlaylists[Number(sel.value)];
+      if (!saved) return;
+
+      const id = extractPlaylistId(saved.url);
+      if (!id) return;
+
+      if (!state.musicPlaylists) state.musicPlaylists = [];
+      const exists = state.musicPlaylists.some(p => (typeof p === 'object' ? p.id : extractPlaylistId(p)) === id);
+      if (!exists) {
+        state.musicPlaylists.push({
+          name: saved.name || id,
+          id: id,
+          url: saved.url
+        });
+        sel.value = '';
+        renderSettingsChips();
+        showStatus('Added "' + saved.name + '" to Music Mode!', 'success');
+      } else {
+        showStatus('Already in music mode', 'error');
+      }
+    });
+  }
+
   bindChipAdder('addAllowChanInput', 'addAllowChanBtn', () => state.allowedChannels);
   bindChipAdder('addBlockChanInput', 'addBlockChanBtn', () => state.blockedChannels);
   bindChipAdder('addKeywordInput', 'addKeywordBtn', () => state.blockedKeywords);
@@ -444,17 +617,33 @@ async function handleSyncPlaylistsFromYouTube() {
 }
 
 async function handleSaveSettings() {
-  state.ytApiKey = document.getElementById('ytKeyEdit').value.trim();
-  state.anthropicKey = document.getElementById('anthropicKeyEdit').value.trim();
-  state.hideThumbnails = document.getElementById('toggleHideThumbnails').checked;
-  state.blankHomepage = document.getElementById('toggleBlankHomepage').checked;
-  state.hideComments = document.getElementById('toggleHideComments').checked;
-  state.hideSidebar = document.getElementById('toggleHideSidebar').checked;
-  state.hideShorts = document.getElementById('toggleHideShorts').checked;
-  state.focusMode = document.getElementById('toggleFocusMode').checked;
-  state.musicMode = document.getElementById('toggleMusicMode').checked;
-  const parsedLimit = parseInt(document.getElementById('dailyLimitInput').value.trim(), 10);
-  state.dailyLimitMinutes = Number.isNaN(parsedLimit) ? 60 : Math.max(0, parsedLimit);
+  const ytKeyEl = document.getElementById('ytKeyEdit');
+  if (ytKeyEl) state.ytApiKey = ytKeyEl.value.trim();
+  const anthropicKeyEl = document.getElementById('anthropicKeyEdit');
+  if (anthropicKeyEl) state.anthropicKey = anthropicKeyEl.value.trim();
+  const hideThumbnailsEl = document.getElementById('toggleHideThumbnails');
+  if (hideThumbnailsEl) state.hideThumbnails = hideThumbnailsEl.checked;
+  const blankHomepageEl = document.getElementById('toggleBlankHomepage');
+  if (blankHomepageEl) state.blankHomepage = blankHomepageEl.checked;
+  const hideCommentsEl = document.getElementById('toggleHideComments');
+  if (hideCommentsEl) state.hideComments = hideCommentsEl.checked;
+  const hideSidebarEl = document.getElementById('toggleHideSidebar');
+  if (hideSidebarEl) state.hideSidebar = hideSidebarEl.checked;
+  const hideShortsEl = document.getElementById('toggleHideShorts');
+  if (hideShortsEl) state.hideShorts = hideShortsEl.checked;
+
+  const focusToggle = document.getElementById('toggleFocusMode');
+  if (focusToggle) state.focusMode = focusToggle.checked;
+
+  const musicToggle = document.getElementById('toggleMusicMode');
+  if (musicToggle) state.musicMode = musicToggle.checked;
+
+  const dailyLimitEl = document.getElementById('dailyLimitInput');
+  if (dailyLimitEl) {
+    const parsedLimit = parseInt(dailyLimitEl.value.trim(), 10);
+    state.dailyLimitMinutes = Number.isNaN(parsedLimit) ? 60 : Math.max(0, parsedLimit);
+  }
+
   await saveState();
   showStatus('Settings saved!', 'success');
   showScreen('main');

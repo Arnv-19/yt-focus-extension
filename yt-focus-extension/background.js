@@ -3,6 +3,7 @@
 const DEFAULT_SETTINGS = {
   ytApiKey: '', anthropicKey: '', setupSkipped: false,
   blankHomepage: true, hideThumbnails: true, hideComments: true, hideSidebar: true, hideShorts: true,
+  focusMode: false, musicMode: true, musicPlaylists: [],
   allowedChannels: [], blockedChannels: [], blockedKeywords: [], blockedCategories: ['music', 'entertainment', 'gaming highlights', 'memes', 'reaction videos', 'vlogs'],
   productiveGroups: {}, activeProductiveGroup: '',
   savedPlaylists: [{ name: 'watch later', url: 'https://www.youtube.com/playlist?list=WL' }],
