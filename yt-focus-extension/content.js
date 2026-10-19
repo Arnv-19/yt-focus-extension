@@ -8,7 +8,7 @@ let settings = {
   hideShorts: true,
   musicMode: true,
   musicPlaylists: [],
-  focusMode: false, // Strict Focus Mode toggle
+  focusMode: false,
   allowedChannels: [],
   blockedChannels: [],
   blockedKeywords: [],
@@ -19,13 +19,16 @@ let settings = {
   dailyLimitMinutes: 60,
   watchedSecondsToday: 0,
   lockMode: false,
-  lockReason: ''
+  lockReason: '',
+  tasks: [],
+  cliTheme: 'arch'
 };
 
 let _lockUnlockUntil = 0;
 let _lockTimer = null;
 let _watchGateDone = false;
 let _blockPlayback = false;
+let _matrixTimer = null;
 let lastUrl = location.href;
 
 document.addEventListener('play', (e) => {
@@ -151,7 +154,6 @@ function applyFilters() {
       if (!new URLSearchParams(location.search).has('list')) activeRules.set('sidebarColumn', () => hideAll('#secondary'));
       else { const sec = document.querySelector('#secondary'); if (sec) sec.style.display = ''; }
     }
-    // Strict Focus Mode or standard Watch Gate check
     if (settings.focusMode || settings.allowedChannels.length > 0 || settings.blockedChannels.length > 0) {
       activeRules.set('watchGate', ruleWatchGate);
     }
@@ -162,7 +164,6 @@ function applyFilters() {
   if (isPlaylist) activeRules.set('playlistRec', rulePlaylistRecommended);
   if (settings.hideShorts) activeRules.set('shorts', ruleHideShorts);
 
-  // Apply card filtering if focus mode is on or allow-lists/block-lists are active
   if ((settings.focusMode || settings.allowedChannels.length > 0 || settings.blockedChannels.length > 0) && !isHome && !isChannelPage) {
     activeRules.set('channelCards', ruleChannelCards);
   }
@@ -171,6 +172,8 @@ function applyFilters() {
   activeRules.set('channelActionPills', ruleInjectChannelPills);
   activeRules.set('searchAds', ruleHideSearchAds);
   activeRules.set('clutter', () => hideAll('ytd-masthead .ytd-notification-topbar-button-renderer'));
+
+  activeRules.set('taskGhostPlaceholder', ruleTaskGhostPlaceholder);
   runRules();
 }
 
@@ -186,7 +189,11 @@ function ruleHomepage() {
   injectCmdOverlay();
 }
 
-function removeBlankOverlay() { document.getElementById('ytf-blank-overlay')?.remove(); }
+function removeBlankOverlay() {
+  document.getElementById('ytf-blank-overlay')?.remove();
+  if (_matrixTimer) { clearInterval(_matrixTimer); _matrixTimer = null; }
+}
+
 function ruleAutoplayOff() { document.querySelector('.ytp-autonav-toggle-button[aria-checked="true"]')?.click(); }
 
 function ruleHideShorts() {
@@ -198,7 +205,6 @@ function ruleHideShorts() {
 }
 
 function ruleHideSearchAds() {
-  // Target only distinct ad modules, never search result containers
   document.querySelectorAll('ytd-promoted-sparkles-web-renderer, ytd-search-pyv-renderer, #masthead-ad, ytd-ad-slot-renderer').forEach(el => {
     el.style.display = 'none';
   });
@@ -210,6 +216,25 @@ function rulePlaylistRecommended() {
   });
 }
 
+// ===== Ghost Placeholder Logic =====
+function ruleTaskGhostPlaceholder() {
+  const searchInput = document.querySelector('input#search, input.ytd-searchbox');
+  if (!searchInput) return;
+
+  const pendingTask = (settings.tasks || []).find(t => !t.done);
+  if (pendingTask) {
+    if (!searchInput.dataset.origPlaceholder) {
+      searchInput.dataset.origPlaceholder = searchInput.getAttribute('placeholder') || 'Search';
+    }
+    const ghostText = `Task: ${pendingTask.text}`;
+    if (searchInput.getAttribute('placeholder') !== ghostText && !searchInput.value) {
+      searchInput.setAttribute('placeholder', ghostText);
+    }
+  } else if (searchInput.dataset.origPlaceholder) {
+    searchInput.setAttribute('placeholder', searchInput.dataset.origPlaceholder);
+  }
+}
+
 function extractPlaylistId(input) {
   if (!input) return '';
   const str = String(input).trim();
@@ -218,27 +243,20 @@ function extractPlaylistId(input) {
       const url = str.startsWith('http') ? new URL(str) : new URL('https://www.youtube.com/' + (str.startsWith('?') ? str : '?' + str));
       return url.searchParams.get('list') || str;
     }
-  } catch (_) {}
+  } catch (_) { }
   return str.replace(/[^a-zA-Z0-9_\-]/g, '');
 }
 
 function isPlaylistPermitted(listId) {
-  if (!settings.musicMode) return false;
-  if (!listId) return false;
-
+  if (!settings.musicMode || !listId) return false;
   const allowed = settings.musicPlaylists || [];
-  // If no specific music playlists are defined, allow any playlist in music mode
   if (allowed.length === 0) return true;
 
   const cleanListId = listId.trim();
   return allowed.some(p => {
     if (!p) return false;
-    if (typeof p === 'string') {
-      const pid = extractPlaylistId(p);
-      return pid === cleanListId || p.trim() === cleanListId;
-    }
-    const pid = p.id || extractPlaylistId(p.url || '');
-    return pid === cleanListId;
+    if (typeof p === 'string') return extractPlaylistId(p) === cleanListId || p.trim() === cleanListId;
+    return (p.id || extractPlaylistId(p.url || '')) === cleanListId;
   });
 }
 
@@ -246,19 +264,14 @@ function isChannelPermitted(channelName) {
   const norm = (channelName || '').trim().toLowerCase();
   const currentList = new URLSearchParams(location.search).get('list');
 
-  // 1. MUSIC MODE BYPASS: If Music Mode is ON and the current playlist is permitted
-  if (settings.musicMode && currentList && isPlaylistPermitted(currentList)) {
-    return true;
-  }
+  if (settings.musicMode && currentList && isPlaylistPermitted(currentList)) return true;
 
-  // 2. If Focus Mode is OFF, everything is permitted by default (unless explicitly blocked)
   if (!settings.focusMode) {
     const blocked = settings.blockedChannels.map(c => c.toLowerCase().trim()).filter(Boolean);
     if (blocked.some(b => norm.includes(b.replace(/^@/, '')))) return false;
     return true;
   }
 
-  // 3. If Focus Mode is ON, it must be explicitly on the allow-list
   if (!norm) return false;
   const blocked = settings.blockedChannels.map(c => c.toLowerCase().trim()).filter(Boolean);
   if (blocked.some(b => norm.includes(b.replace(/^@/, '')))) return false;
@@ -266,6 +279,7 @@ function isChannelPermitted(channelName) {
   const allowed = settings.allowedChannels.map(c => c.toLowerCase().trim()).filter(Boolean);
   return allowed.some(a => norm.includes(a.replace(/^@/, '')));
 }
+
 function ruleChannelCards() {
   ['ytd-rich-item-renderer', 'ytd-video-renderer', 'ytd-compact-video-renderer'].forEach(sel => {
     document.querySelectorAll(sel).forEach(card => {
@@ -318,27 +332,10 @@ function createActionPills(rawName) {
   blockBtn.className = 'ytf-pill-btn block ' + (isBlocked ? 'is-active' : '');
   blockBtn.textContent = isBlocked ? '[✓ blocked]' : '[✕ block]';
 
-  const catBtn = document.createElement('button');
-  catBtn.className = 'ytf-pill-btn cat';
-  catBtn.textContent = '[+ category]';
-
   allowBtn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); toggleChannelInList('allowedChannels', rawName, 'blockedChannels'); });
   blockBtn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); toggleChannelInList('blockedChannels', rawName, 'allowedChannels'); });
-  catBtn.addEventListener('click', (e) => {
-    e.preventDefault(); e.stopPropagation();
-    const existingCats = Object.keys(settings.productiveGroups || {});
-    const hint = existingCats.length ? 'Existing: ' + existingCats.join(', ') : 'e.g. coding, math, science';
-    const chosen = prompt('Add "' + rawName + '" to which Productive Category?\n(' + hint + ')');
-    if (!chosen || !chosen.trim()) return;
-    const cat = chosen.trim();
-    const groups = { ...(settings.productiveGroups || {}) };
-    if (!groups[cat]) groups[cat] = [];
-    if (!groups[cat].some(c => c.toLowerCase() === rawName.toLowerCase())) groups[cat].push(rawName);
-    chrome.storage.local.set({ productiveGroups: groups, activeProductiveGroup: cat });
-    catBtn.textContent = '[✓ ' + cat + ']';
-  });
 
-  wrap.appendChild(allowBtn); wrap.appendChild(blockBtn); wrap.appendChild(catBtn);
+  wrap.appendChild(allowBtn); wrap.appendChild(blockBtn);
   return wrap;
 }
 
@@ -416,7 +413,6 @@ function injectWatchBlockScreen(channelName) {
     });
   });
 
-  // Double-ask confirmation prompt before whitelisting when Focus Mode is on
   div.querySelector('#ytf-quick-allow')?.addEventListener('click', () => {
     if (settings.focusMode) {
       const confirmAdd = confirm(`Focus Mode is active!\n\nAre you sure you want to permanently add "${channelName}" to your allowed whitelist?`);
@@ -434,14 +430,81 @@ function injectWatchBlockScreen(channelName) {
 
 function clearWatchBlock() { _watchGateDone = false; _blockPlayback = false; document.getElementById('ytf-watch-block')?.remove(); }
 
+
+// ===== 0,1 MATRIX WATERFALL GENERATOR =====
+function toggleMatrix(container) {
+  let bg = document.getElementById('ytf-matrix-bg');
+  if (bg) {
+    if (_matrixTimer) { clearInterval(_matrixTimer); _matrixTimer = null; }
+    bg.remove();
+    return false;
+  }
+
+  bg = document.createElement('canvas');
+  bg.id = 'ytf-matrix-bg';
+  container.prepend(bg); // Insert behind the terminal
+
+  const ctx = bg.getContext('2d');
+  bg.width = window.innerWidth;
+  bg.height = window.innerHeight;
+
+  const chars = '01';
+  const fontSize = 16;
+  const columns = bg.width / fontSize;
+
+  // Randomize initial drop positions so they fall at different times
+  const drops = Array(Math.floor(columns)).fill(0).map(() => Math.floor(Math.random() * -100));
+
+  _matrixTimer = setInterval(() => {
+    // Fade the background to create the trail effect
+    ctx.fillStyle = 'rgba(10, 10, 11, 0.1)';
+    ctx.fillRect(0, 0, bg.width, bg.height);
+
+    ctx.fillStyle = '#00ff41'; // Hacker green text
+    ctx.font = fontSize + 'px "IBM Plex Mono", monospace';
+
+    for (let i = 0; i < drops.length; i++) {
+      // Only draw if the drop has entered the screen
+      if (drops[i] * fontSize >= 0) {
+        const text = chars.charAt(Math.floor(Math.random() * chars.length));
+        ctx.fillText(text, i * fontSize, drops[i] * fontSize);
+      }
+
+      // Send the drop back to the top randomly after it crosses the bottom
+      if (drops[i] * fontSize > bg.height && Math.random() > 0.975) {
+        drops[i] = 0;
+      }
+      drops[i]++;
+    }
+  }, 45); // Smooth rain speed
+
+  window.addEventListener('resize', () => {
+    if (document.getElementById('ytf-matrix-bg')) {
+      bg.width = window.innerWidth;
+      bg.height = window.innerHeight;
+    }
+  });
+
+  return true;
+}
+
+
+// ===== CLI INTERFACE + COMMANDS =====
 function injectCmdOverlay() {
   if (document.getElementById('ytf-blank-overlay')) return;
   const watchedMin = Math.floor((settings.watchedSecondsToday || 0) / 60);
   const limitStr = settings.dailyLimitMinutes > 0 ? settings.dailyLimitMinutes + 'm' : '∞';
   const playlistsHtml = (settings.savedPlaylists || []).map(pl => `<a href="${escapeHtmlSimple(pl.url)}" class="ytf-shortcut">[${escapeHtmlSimple(pl.name)}]</a>`).join('');
 
+  // Generate Task List HTML
+  const pendingTasks = (settings.tasks || []).filter(t => !t.done);
+  const taskHtml = pendingTasks.length > 0
+    ? pendingTasks.map((t, idx) => `<div style="font-size:12px;margin-bottom:4px;color:#00d4aa;">[${idx + 1}] ${escapeHtmlSimple(t.text)}</div>`).join('')
+    : '<div class="ytf-dim">> No active tasks. Use /tl to add one.</div>';
+
   const div = document.createElement('div');
   div.id = 'ytf-blank-overlay';
+
   div.innerHTML = `
     <div class="ytf-cmd-window">
       <div class="ytf-cmd-titlebar">
@@ -450,6 +513,13 @@ function injectCmdOverlay() {
       </div>
       <div class="ytf-cmd-body">
         <div class="ytf-line ytf-dim">> YT Focus v2.0 | focus mode: <span class="${settings.focusMode ? 'ytf-green' : 'ytf-yellow'}">[${settings.focusMode ? 'ON' : 'OFF'}]</span> | watched: <span class="ytf-green">${watchedMin}m / ${limitStr}</span></div>
+        
+        <!-- Intent Queue injected seamlessly here -->
+        <div style="margin: 8px 0; padding: 8px; border: 1px dashed #2a2a2f;">
+          <div class="ytf-line ytf-dim" style="margin-bottom:6px;">> Active Intent Queue:</div>
+          <div id="ytf-cli-tasks">${taskHtml}</div>
+        </div>
+
         <div class="ytf-status-grid">
           <div class="ytf-line">> thumbnails: <span class="${settings.hideThumbnails ? 'ytf-green' : 'ytf-yellow'}">[${settings.hideThumbnails ? 'HIDDEN' : 'VISIBLE'}]</span></div>
           <div class="ytf-line">> comments: <span class="${settings.hideComments ? 'ytf-green' : 'ytf-yellow'}">[${settings.hideComments ? 'BLOCKED' : 'ON'}]</span></div>
@@ -460,7 +530,7 @@ function injectCmdOverlay() {
         <div class="ytf-shortcuts">${playlistsHtml}<a href="https://www.youtube.com/feed/subscriptions" class="ytf-shortcut">[subscriptions]</a><a href="https://www.youtube.com/feed/playlists" class="ytf-shortcut">[all playlists]</a></div>
         <form class="ytf-cli-form" id="ytf-cli-form">
           <span class="ytf-cli-prompt">C:\\Users\\focus></span>
-          <input type="text" class="ytf-cli-input" id="ytf-cli-input" placeholder="Type search or command (/wl, /focus on/off, /allow name)..." autocomplete="off" />
+          <input type="text" class="ytf-cli-input" id="ytf-cli-input" placeholder="Type search or command (/search, /tl, /lock, /matrix)..." autocomplete="off" />
           <button type="submit" class="ytf-cli-submit">RUN ↵</button>
         </form>
         <div class="ytf-cli-feedback" id="ytf-cli-feedback"></div>
@@ -488,8 +558,25 @@ function injectCmdOverlay() {
 
     const [cmd, ...rest] = raw.split(' ');
     const arg = rest.join(' ').trim();
+
     switch (cmd.toLowerCase()) {
-      case '/help': feedback.textContent = 'Commands: /wl, /subs, /playlists, /focus on/off, /lock, /allow <channel>'; break;
+      case '/search':
+        if (!arg) feedback.textContent = 'Usage: /search <query>';
+        else { removeBlankOverlay(); window.location.assign('https://www.youtube.com/results?search_query=' + encodeURIComponent(arg)); }
+        break;
+      case '/tl':
+        handleTaskCommand(arg, feedback);
+        break;
+      case '/lock':
+        handleLockCommand(arg, feedback);
+        break;
+      case '/matrix':
+        const isMatrixRainOn = toggleMatrix(div);
+        feedback.textContent = isMatrixRainOn ? '> Visual easter egg: Waterfall activated.' : '> Waterfall terminated.';
+        break;
+      case '/help':
+        feedback.textContent = 'Commands: /search <query>, /tl <task>, /tl done 1, /lock 1h, /lock 30m, /matrix, /focus on/off';
+        break;
       case '/wl': removeBlankOverlay(); window.location.assign('https://www.youtube.com/playlist?list=WL'); break;
       case '/subs': removeBlankOverlay(); window.location.assign('https://www.youtube.com/feed/subscriptions'); break;
       case '/playlists': removeBlankOverlay(); window.location.assign('https://www.youtube.com/feed/playlists'); break;
@@ -502,7 +589,6 @@ function injectCmdOverlay() {
           feedback.textContent = 'Usage: /focus on or /focus off';
         }
         break;
-      case '/lock': chrome.storage.local.set({ lockMode: true, lockReason: 'manual' }); break;
       case '/allow':
         if (arg) {
           toggleChannelInList('allowedChannels', arg, 'blockedChannels');
@@ -514,13 +600,73 @@ function injectCmdOverlay() {
   });
 }
 
+function handleTaskCommand(arg, feedback) {
+  let tasks = [...(settings.tasks || [])];
+
+  if (arg.startsWith('done ')) {
+    const idx = parseInt(arg.replace('done ', '').trim(), 10) - 1;
+    if (tasks[idx]) {
+      tasks.splice(idx, 1);
+      chrome.storage.local.set({ tasks }, () => { feedback.textContent = `> Task marked completed.`; refreshTaskList(); });
+    } else feedback.textContent = `> Invalid task index.`;
+    return;
+  }
+
+  if (arg === 'clear') {
+    chrome.storage.local.set({ tasks: [] }, () => { feedback.textContent = `> All tasks cleared.`; refreshTaskList(); });
+    return;
+  }
+
+  if (!arg) {
+    feedback.textContent = 'Usage: /tl <task text> or /tl done 1';
+    return;
+  }
+
+  tasks.push({ text: arg, done: false, created: Date.now() });
+  chrome.storage.local.set({ tasks }, () => {
+    feedback.textContent = `> Added task: "${arg}"`;
+    refreshTaskList();
+  });
+}
+
+function refreshTaskList() {
+  chrome.storage.local.get(['tasks'], (data) => {
+    settings.tasks = data.tasks || [];
+    const container = document.getElementById('ytf-cli-tasks');
+    if (!container) return;
+    const pendingTasks = settings.tasks.filter(t => !t.done);
+    container.innerHTML = pendingTasks.length > 0
+      ? pendingTasks.map((t, idx) => `<div style="font-size:12px;margin-bottom:4px;color:#00d4aa;">[${idx + 1}] ${escapeHtmlSimple(t.text)}</div>`).join('')
+      : '<div class="ytf-dim">> No active tasks. Use /tl to add one.</div>';
+    ruleTaskGhostPlaceholder();
+  });
+}
+
+function handleLockCommand(arg, feedback) {
+  if (!arg) { feedback.textContent = 'Usage: /lock <duration> (e.g. /lock 1h, /lock 30m)'; return; }
+
+  let ms = 0;
+  if (arg.endsWith('h') || arg.endsWith('hr')) ms = parseFloat(arg) * 3600 * 1000;
+  else if (arg.endsWith('m') || arg.endsWith('min')) ms = parseFloat(arg) * 60 * 1000;
+  else ms = parseFloat(arg) * 60 * 1000; // default to minutes if no unit
+
+  if (isNaN(ms) || ms <= 0) { feedback.textContent = 'Invalid duration.'; return; }
+
+  const unlockUntil = Date.now() + ms;
+  chrome.storage.local.set({ lockUnlockUntil: unlockUntil, lockReason: 'cli_timer' }, () => {
+    _lockUnlockUntil = unlockUntil;
+    feedback.textContent = `> Lockdown engaged.`;
+    startLockEnforcer();
+  });
+}
+
 function getCurrentChannelName() {
   return document.querySelector('ytd-watch-metadata ytd-channel-name a, #owner #channel-name a, yt-page-header-view-model h1, ytd-channel-name a')?.textContent?.trim()?.split('\n')?.[0]?.trim() || '';
 }
 
 function injectLockScreen(countdownSec = 0) {
   let div = document.getElementById('ytf-lock-screen');
-  const subText = countdownSec > 0 ? 'Unlocking in ' + countdownSec + 's...' : 'Toggle off Lock Mode in the extension popup to continue.';
+  const subText = countdownSec > 0 ? 'Unlocking in ' + formatTime(countdownSec) + '...' : 'Toggle off Lock Mode in the extension popup to continue.';
   if (!div) {
     div = document.createElement('div');
     div.id = 'ytf-lock-screen';
@@ -530,11 +676,17 @@ function injectLockScreen(countdownSec = 0) {
   div.innerHTML = `
     <div style="font-family:'IBM Plex Mono',monospace;text-align:center;padding:40px 32px;max-width:460px;">
       <div style="font-size:15px;color:#e8e8ec;font-weight:600;margin-bottom:14px;">🔒 YouTube is locked.</div>
-      <div style="font-size:11px;color:#febc2e;">${escapeHtmlSimple(subText)}</div>
+      <div style="font-size:15px;color:#febc2e;">${escapeHtmlSimple(subText)}</div>
     </div>
   `;
   const vid = document.querySelector('video');
   if (vid) { vid.pause(); vid.muted = true; }
+}
+
+function formatTime(totalSec) {
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${m}:${s < 10 ? '0' : ''}${s}`;
 }
 
 function startLockEnforcer() {

@@ -328,3 +328,18 @@ html.ytf-hide-thumbnails ytd-playlist-video-renderer {
   z-index: 99999;
   font-family: 'IBM Plex Mono', monospace;
 }
+
+/* Animated Matrix Background Canvas */
+#ytf-matrix-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.8;
+}
+
+/* Ensure the CLI window stays on top of the rain */
+.ytf-cmd-window {
+  z-index: 1 !important;
+  position: relative !important;
+}

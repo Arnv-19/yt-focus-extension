@@ -27,7 +27,8 @@
       </div>
       <div class="time-segment" id="currentChanBar" style="margin-left:auto; display:none;">
         <button class="btn-xs" id="quickAllowCurrentBtn">+ allow tab</button>
-        <button class="btn-xs" id="quickAllowPlaylistBtn" style="display:none; color:var(--yellow); border-color:var(--yellow);">+ 🎵 music</button>
+        <button class="btn-xs" id="quickAllowPlaylistBtn"
+          style="display:none; color:var(--yellow); border-color:var(--yellow);">+ 🎵 music</button>
         <button class="btn-xs danger" id="quickBlockCurrentBtn">✕ block</button>
       </div>
     </div>
@@ -57,60 +58,19 @@
 
       <nav class="mode-tabs">
         <button class="tab active" data-mode="search">Search</button>
-        <button class="tab" data-mode="watchlater">Playlists</button>
-        <button class="tab" data-mode="productive">Productive</button>
         <button class="tab" data-mode="channel">Channel</button>
       </nav>
 
       <div id="searchMode" class="mode-panel active">
         <div class="search-bar">
-          <input type="text" id="searchInput" placeholder="search youtube..." autocomplete="off">
+          <input type="text" id="searchInput" placeholder="search youtube (or /tl, /search)..." autocomplete="off">
           <button class="search-btn" id="searchBtn">→</button>
         </div>
         <div class="filter-row">
-          <label class="toggle-label">
-            <input type="checkbox" id="aiFilterSearch" checked>
-            <span class="toggle"></span> AI Filter
-          </label>
+          <label class="toggle-label"><input type="checkbox" id="aiFilterSearch" checked><span class="toggle"></span> AI
+            Filter</label>
         </div>
         <div id="searchResults" class="results-list"></div>
-      </div>
-
-      <div id="watchlaterMode" class="mode-panel">
-        <div class="panel-header">
-          <select id="playlistSelect" class="select-input"></select>
-          <button class="btn-sm" id="loadWatchLater">Load →</button>
-          <button class="btn-sm" id="openPlaylistTabBtn" title="Open playlist in tab">↗</button>
-        </div>
-        <div class="filter-row">
-          <label class="toggle-label">
-            <input type="checkbox" id="aiFilterWL" checked>
-            <span class="toggle"></span> AI Filter
-          </label>
-        </div>
-        <div id="watchLaterResults" class="results-list"></div>
-      </div>
-
-      <div id="productiveMode" class="mode-panel">
-        <div class="panel-header">
-          <span>Your Categories</span>
-          <button class="btn-sm" id="loadProductive">Fetch Videos →</button>
-        </div>
-        <div id="productiveTags" class="productive-tags"></div>
-        <div class="inline-manager">
-          <div class="mini-row">
-            <input type="text" id="newCategoryInput" placeholder="+ new category tag (e.g. coding)...">
-            <button class="btn-sm" id="addCategoryBtn">+ Tag</button>
-          </div>
-          <div id="activeCategoryBox" class="category-channels-box hidden">
-            <div class="mini-row" style="margin-top:6px;">
-              <input type="text" id="newCatChannelInput" placeholder="add @channel or name to selected tag...">
-              <button class="btn-sm" id="addCatChannelBtn">+ Chan</button>
-            </div>
-            <div id="catChannelChips" class="chip-list" style="margin-top:6px;"></div>
-          </div>
-        </div>
-        <div id="productiveResults" class="results-list"></div>
       </div>
 
       <div id="channelMode" class="mode-panel">
@@ -119,22 +79,32 @@
           <button class="search-btn" id="channelBtn">→</button>
         </div>
         <div class="filter-row">
-          <label class="toggle-label">
-            <input type="checkbox" id="aiFilterChannel" checked>
-            <span class="toggle"></span> AI Filter
-          </label>
+          <label class="toggle-label"><input type="checkbox" id="aiFilterChannel" checked><span class="toggle"></span>
+            AI Filter</label>
         </div>
         <div id="channelResults" class="results-list"></div>
       </div>
     </div>
 
     <div id="settingsPanel" class="screen hidden">
-
       <div class="settings-header">
         <button class="back-btn" id="backBtn">← back</button>
         <span>Settings</span>
       </div>
       <div class="settings-body">
+
+        <div class="setting-section-title">&gt; environment theme</div>
+        <div class="setting-group setting-row">
+          <span class="setting-row-label">linux distro style</span>
+          <select id="themeSelect" class="select-input" style="width:140px;">
+            <option value="arch">Arch Linux (Cyan)</option>
+            <option value="ubuntu">Ubuntu (Orange)</option>
+            <option value="kali">Kali Linux (Blue)</option>
+            <option value="mint">Linux Mint (Green)</option>
+            <option value="debian">Debian (Red)</option>
+          </select>
+        </div>
+
         <div class="setting-section-title">&gt; page &amp; text-only controls</div>
         <div class="setting-group setting-row">
           <span class="setting-row-label">hide thumbnails (text-only)</span>
@@ -163,96 +133,18 @@
         </div>
         <div class="setting-group setting-row">
           <span class="setting-row-label">strict focus mode (whitelist only)</span>
-          <label class="toggle-label">
-            <input type="checkbox" id="toggleFocusMode">
-            <span class="toggle"></span>
-          </label>
+          <label class="toggle-label"><input type="checkbox" id="toggleFocusMode"><span class="toggle"></span></label>
         </div>
         <div class="setting-group setting-row">
           <span class="setting-row-label">music mode (bypass focus on playlists)</span>
-          <label class="toggle-label">
-            <input type="checkbox" id="toggleMusicMode" checked>
-            <span class="toggle"></span>
-          </label>
-        </div>
-
-        <div class="setting-section-title">&gt; music mode playlists (whitelist: empty = allow all)</div>
-        <div class="setting-group">
-          <div class="mini-row">
-            <input type="text" id="newMusicPlaylistName" placeholder="name (e.g. lofi study)">
-            <input type="text" id="newMusicPlaylistUrl" placeholder="playlist URL or ID">
-            <button class="btn-sm" id="addMusicPlaylistBtn">+ Add</button>
-          </div>
-          <div class="mini-row" id="addSavedToMusicRow" style="margin-top: 4px;">
-            <select id="selectSavedForMusic" class="select-input" style="flex:1;">
-              <option value="">-- add from saved playlists --</option>
-            </select>
-            <button class="btn-sm" id="addSavedToMusicBtn">+ Add to Music</button>
-          </div>
-          <div id="musicPlaylistsChips" class="chip-list"></div>
+          <label class="toggle-label"><input type="checkbox" id="toggleMusicMode" checked><span
+              class="toggle"></span></label>
         </div>
 
         <div class="setting-section-title">&gt; daily watch time budget</div>
         <div class="setting-group setting-row">
           <span class="setting-row-label">daily limit (minutes, 0 = off)</span>
           <input type="text" id="dailyLimitInput" style="width:70px; text-align:center;" placeholder="60">
-        </div>
-
-        <div class="setting-section-title">&gt; saved playlists (remove or sync)</div>
-        <div class="setting-group">
-          <button class="btn-sm" id="syncPlaylistsBtn" style="width:100%;">↻ Sync All My Playlists from YouTube</button>
-          <div class="mini-row">
-            <input type="text" id="newPlaylistName" placeholder="name (e.g. study)">
-            <input type="text" id="newPlaylistUrl" placeholder="playlist URL or ID">
-            <button class="btn-sm" id="addPlaylistBtn">+</button>
-          </div>
-          <div id="savedPlaylistsChips" class="chip-list"></div>
-        </div>
-
-        <div class="setting-section-title">&gt; channel allow-list (empty = allow all)</div>
-        <div class="setting-group">
-          <div class="mini-row">
-            <input type="text" id="addAllowChanInput" placeholder="channel name or @handle...">
-            <button class="btn-sm" id="addAllowChanBtn">+ Add</button>
-          </div>
-          <div id="allowedChannelsChips" class="chip-list"></div>
-        </div>
-
-        <div class="setting-section-title">&gt; channel block-list</div>
-        <div class="setting-group">
-          <div class="mini-row">
-            <input type="text" id="addBlockChanInput" placeholder="channel to block...">
-            <button class="btn-sm" id="addBlockChanBtn">+ Block</button>
-          </div>
-          <div id="blockedChannelsChips" class="chip-list"></div>
-        </div>
-
-        <div class="setting-section-title">&gt; blocked title keywords</div>
-        <div class="setting-group">
-          <div class="mini-row">
-            <input type="text" id="addKeywordInput" placeholder="word (e.g. drama)...">
-            <button class="btn-sm" id="addKeywordBtn">+ Add</button>
-          </div>
-          <div id="blockedKeywordsChips" class="chip-list"></div>
-        </div>
-
-        <div class="setting-section-title">&gt; ai blocked categories</div>
-        <div class="setting-group">
-          <div class="mini-row">
-            <input type="text" id="addAiCatInput" placeholder="category to block...">
-            <button class="btn-sm" id="addAiCatBtn">+ Add</button>
-          </div>
-          <div id="blockedAiCatsChips" class="chip-list"></div>
-        </div>
-
-        <div class="setting-section-title">&gt; api keys (optional)</div>
-        <div class="setting-group">
-          <label>YouTube API Key</label>
-          <input type="password" id="ytKeyEdit" placeholder="leave empty for keyless mode">
-        </div>
-        <div class="setting-group">
-          <label>Anthropic API Key</label>
-          <input type="password" id="anthropicKeyEdit" placeholder="sk-ant-...">
         </div>
 
         <button class="btn-primary" id="saveSettingsBtn">Save Settings</button>
