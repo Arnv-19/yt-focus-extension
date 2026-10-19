@@ -5,9 +5,10 @@ let state = {
   blankHomepage: true, hideThumbnails: true, hideComments: true, hideSidebar: true, hideShorts: true,
   focusMode: false, musicMode: true, musicPlaylists: [],
   allowedChannels: [], blockedChannels: [], blockedKeywords: [],
+  savedPlaylists: [],
   dailyLimitMinutes: 60, watchedSecondsToday: 0,
   lockMode: false, lockReason: '', lockUnlockUntil: 0,
-  lastMode: 'search', cliTheme: 'arch', tasks: []
+  lastMode: 'search', tasks: []
 };
 
 let currentTabChannel = '';
@@ -150,10 +151,6 @@ function showScreen(name) {
   if (name === 'settings') {
     document.getElementById('settingsPanel')?.classList.remove('hidden');
 
-    // Theme Selector
-    const themeSel = document.getElementById('themeSelect');
-    if (themeSel) themeSel.value = state.cliTheme || 'arch';
-
     if (document.getElementById('ytKeyEdit')) document.getElementById('ytKeyEdit').value = state.ytApiKey || '';
     if (document.getElementById('anthropicKeyEdit')) document.getElementById('anthropicKeyEdit').value = state.anthropicKey || '';
     document.getElementById('toggleHideThumbnails').checked = !!state.hideThumbnails;
@@ -169,9 +166,16 @@ function showScreen(name) {
 }
 
 function switchMode(mode) {
-  const tab = document.querySelector(`.tab[data-mode="${mode}"]`);
-  const panel = document.getElementById(`${mode}Mode`);
-  if (!tab || !panel) return;
+  let tab = document.querySelector(`.tab[data-mode="${mode}"]`);
+  let panel = document.getElementById(`${mode}Mode`);
+
+  // Failsafe: If the saved mode doesn't exist anymore, default to 'search'
+  if (!tab || !panel) {
+    mode = 'search';
+    tab = document.querySelector(`.tab[data-mode="${mode}"]`);
+    panel = document.getElementById(`${mode}Mode`);
+  }
+
   state.lastMode = mode;
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   tab.classList.add('active');
@@ -181,6 +185,27 @@ function switchMode(mode) {
 }
 
 function renderSettingsChips() {
+  const plContainer = document.getElementById('savedPlaylistsChips');
+  if (plContainer) {
+    plContainer.innerHTML = (state.savedPlaylists || []).map((pl, idx) => {
+      const plId = extractPlaylistId(pl.url);
+      const inMusic = (state.musicPlaylists || []).some(m => (typeof m === 'object' ? m.id : extractPlaylistId(m)) === plId);
+      return `
+        <span class="chip">
+          <span>${escapeHtml(pl.name)}</span>
+          ${inMusic ? '<span style="color:var(--yellow);font-size:9px;margin-left:4px;">[🎵]</span>' : ''}
+          <button class="chip-del" data-del-pl="${idx}">×</button>
+        </span>
+      `;
+    }).join('');
+    plContainer.querySelectorAll('[data-del-pl]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        state.savedPlaylists.splice(Number(btn.dataset.delPl), 1);
+        chrome.storage.local.set({ savedPlaylists: state.savedPlaylists }, renderSettingsChips);
+      });
+    });
+  }
+
   const musicPlContainer = document.getElementById('musicPlaylistsChips');
   if (musicPlContainer) {
     const list = state.musicPlaylists || [];
@@ -221,6 +246,17 @@ function renderSimpleChipList(containerId, items, onRemove, isDanger = false) {
     </span>
   `).join('');
   el.querySelectorAll('.chip-del').forEach(btn => btn.addEventListener('click', () => onRemove(btn.dataset.val)));
+}
+
+function sendBgWithTimeout(payload, timeoutMs = 8000) {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve({ error: 'Timed out. Open any YouTube tab while signed in and try again.' }), timeoutMs);
+    chrome.runtime.sendMessage(payload, (res) => {
+      clearTimeout(timer);
+      if (chrome.runtime.lastError) resolve({ error: chrome.runtime.lastError.message });
+      else resolve(res || {});
+    });
+  });
 }
 
 function setupEventListeners() {
@@ -293,6 +329,42 @@ function setupEventListeners() {
     });
   }
 
+  const syncPlaylistsBtn = document.getElementById('syncPlaylistsBtn');
+  if (syncPlaylistsBtn) {
+    syncPlaylistsBtn.addEventListener('click', async () => {
+      showLoading(true);
+      const res = await sendBgWithTimeout({ action: 'syncUserPlaylistsBg' });
+      showLoading(false);
+      if (res.error) { showStatus(res.error, 'error'); return; }
+      const found = res.playlists || [];
+      const existingUrls = new Set((state.savedPlaylists || []).map(p => p.url));
+      let added = 0;
+      found.forEach(p => {
+        if (!existingUrls.has(p.url)) {
+          state.savedPlaylists.push(p);
+          existingUrls.add(p.url);
+          added++;
+        }
+      });
+      renderSettingsChips();
+      showStatus('Synced ' + added + ' playlist(s)!', 'success');
+    });
+  }
+
+  const addPlaylistBtn = document.getElementById('addPlaylistBtn');
+  if (addPlaylistBtn) {
+    addPlaylistBtn.addEventListener('click', () => {
+      const name = document.getElementById('newPlaylistName').value.trim().toLowerCase();
+      let url = document.getElementById('newPlaylistUrl').value.trim();
+      if (!name || !url) return;
+      if (!url.startsWith('http')) url = 'https://www.youtube.com/playlist?list=' + encodeURIComponent(url);
+      state.savedPlaylists.push({ name, url });
+      document.getElementById('newPlaylistName').value = '';
+      document.getElementById('newPlaylistUrl').value = '';
+      renderSettingsChips();
+    });
+  }
+
   bindChipAdder('addAllowChanInput', 'addAllowChanBtn', () => state.allowedChannels);
   bindChipAdder('addBlockChanInput', 'addBlockChanBtn', () => state.blockedChannels);
   bindChipAdder('addKeywordInput', 'addKeywordBtn', () => state.blockedKeywords);
@@ -319,9 +391,6 @@ function bindChipAdder(inputId, btnId, getArrayFn) {
 }
 
 async function handleSaveSettings() {
-  const themeSel = document.getElementById('themeSelect');
-  if (themeSel) state.cliTheme = themeSel.value;
-
   if (document.getElementById('ytKeyEdit')) state.ytApiKey = document.getElementById('ytKeyEdit').value.trim();
   if (document.getElementById('anthropicKeyEdit')) state.anthropicKey = document.getElementById('anthropicKeyEdit').value.trim();
   state.hideThumbnails = document.getElementById('toggleHideThumbnails').checked;
@@ -376,3 +445,8 @@ function showStatus(msg, type = '') {
 }
 
 function escapeHtml(str) { return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+function showLoading(show) {
+  const loader = document.getElementById('loadingOverlay');
+  if (loader) loader.classList.toggle('hidden', !show);
+}

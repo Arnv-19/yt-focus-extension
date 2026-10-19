@@ -93,18 +93,6 @@
       </div>
       <div class="settings-body">
 
-        <div class="setting-section-title">&gt; environment theme</div>
-        <div class="setting-group setting-row">
-          <span class="setting-row-label">linux distro style</span>
-          <select id="themeSelect" class="select-input" style="width:140px;">
-            <option value="arch">Arch Linux (Cyan)</option>
-            <option value="ubuntu">Ubuntu (Orange)</option>
-            <option value="kali">Kali Linux (Blue)</option>
-            <option value="mint">Linux Mint (Green)</option>
-            <option value="debian">Debian (Red)</option>
-          </select>
-        </div>
-
         <div class="setting-section-title">&gt; page &amp; text-only controls</div>
         <div class="setting-group setting-row">
           <span class="setting-row-label">hide thumbnails (text-only)</span>
@@ -147,7 +135,55 @@
           <input type="text" id="dailyLimitInput" style="width:70px; text-align:center;" placeholder="60">
         </div>
 
-        <button class="btn-primary" id="saveSettingsBtn">Save Settings</button>
+        <div class="setting-section-title">&gt; music mode playlists (whitelist: empty = allow all)</div>
+        <div class="setting-group">
+          <div class="mini-row">
+            <input type="text" id="newMusicPlaylistName" placeholder="name (e.g. lofi study)">
+            <input type="text" id="newMusicPlaylistUrl" placeholder="playlist URL or ID">
+            <button class="btn-sm" id="addMusicPlaylistBtn">+ Add</button>
+          </div>
+          <div id="musicPlaylistsChips" class="chip-list" style="margin-top: 6px;"></div>
+        </div>
+
+        <div class="setting-section-title">&gt; saved playlists (remove or sync)</div>
+        <div class="setting-group">
+          <button class="btn-sm" id="syncPlaylistsBtn" style="width:100%;">↻ Sync All My Playlists from YouTube</button>
+          <div class="mini-row" style="margin-top: 4px;">
+            <input type="text" id="newPlaylistName" placeholder="name (e.g. study)">
+            <input type="text" id="newPlaylistUrl" placeholder="playlist URL or ID">
+            <button class="btn-sm" id="addPlaylistBtn">+</button>
+          </div>
+          <div id="savedPlaylistsChips" class="chip-list"></div>
+        </div>
+
+        <div class="setting-section-title">&gt; channel allow-list (empty = allow all)</div>
+        <div class="setting-group">
+          <div class="mini-row">
+            <input type="text" id="addAllowChanInput" placeholder="channel name or @handle...">
+            <button class="btn-sm" id="addAllowChanBtn">+ Add</button>
+          </div>
+          <div id="allowedChannelsChips" class="chip-list"></div>
+        </div>
+
+        <div class="setting-section-title">&gt; channel block-list</div>
+        <div class="setting-group">
+          <div class="mini-row">
+            <input type="text" id="addBlockChanInput" placeholder="channel to block...">
+            <button class="btn-sm" id="addBlockChanBtn">+ Block</button>
+          </div>
+          <div id="blockedChannelsChips" class="chip-list"></div>
+        </div>
+
+        <div class="setting-section-title">&gt; blocked title keywords</div>
+        <div class="setting-group">
+          <div class="mini-row">
+            <input type="text" id="addKeywordInput" placeholder="word (e.g. drama)...">
+            <button class="btn-sm" id="addKeywordBtn">+ Add</button>
+          </div>
+          <div id="blockedKeywordsChips" class="chip-list"></div>
+        </div>
+
+        <button class="btn-primary" id="saveSettingsBtn" style="margin-top: 10px;">Save Settings</button>
         <button class="btn-danger" id="clearDataBtn">Reset All Data</button>
       </div>
     </div>
